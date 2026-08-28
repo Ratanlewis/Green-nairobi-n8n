@@ -1,0 +1,79 @@
+<main class="shell">
+  <header class="topbar">
+    <div class="brand-mark" aria-hidden="true"><img src="images/nairobi-city-logo.png" alt=""></div>
+    <div class="brand-copy">
+      <p>Nairobi City County Green &amp; Clean</p>
+      <h1>AI Data Assistant</h1>
+    </div>
+    <div class="header-note"><span class="live-dot"></span> Green &amp; Clean programme data</div>
+    <div class="avatar">NC</div>
+  </header>
+  <section class="hero">
+    <div>
+      <p class="eyebrow">INTELLIGENCE HUB</p>
+      <h2>Ask Green and Clean AI Assistant a question.</h2>
+      <p>Clear, verified insights from Green &amp; Clean field reports.</p>
+    </div>
+    <div class="hero-leaf" aria-hidden="true">⌁</div>
+  </section>
+  @if (scorecards().length) { <section class="cards" aria-label="Verified indicators">@for (card of scorecards(); track
+    card.label) { <article class="metric-card"><span class="metric-icon">{{ card.icon }}</span>
+      <p>{{ card.label }}</p><strong>{{ card.value }}</strong><small>Verified from current query</small>
+    </article> }</section> }
+  <section class="workspace">
+    <div class="main-column">
+      <section class="ask-card">
+        <div class="section-title"><span class="spark">✦</span>
+          <div>
+            <h3>Ask the data assistant</h3>
+            <p>Query trees, staff, activities, locations, dates, and resource needs.</p>
+          </div>
+        </div>
+        <div class="input-wrap"><textarea [(ngModel)]="question" (keydown.enter)="onEnter($event)"
+            [disabled]="loading()" placeholder="e.g. How many trees have been planted in Westlands?" rows="3"
+            aria-label="Question for Nairobi County data assistant"></textarea><button (click)="ask()"
+            [disabled]="loading() || !question.trim()">@if (loading()) { <span class="spinner"></span> Working } @else {
+            Ask assistant <span>→</span> }</button></div>
+        <p class="hint">Press Enter to send · Shift + Enter for a new line</p>
+      </section>
+      @if (error()) { <div class="error" role="alert"><span>!</span>{{ error() }}</div> }
+      @if (hasResponse()) { <section class="response-card">
+        <div class="response-heading">
+          <div>
+            <p class="eyebrow">AI RESPONSE</p>
+            <h3>Here’s what the data shows</h3>
+          </div><span class="verified">● Verified</span>
+        </div>
+        <p class="question-label">“{{ question }}”</p>
+        <p class="answer">{{ result()?.answer }}</p>
+        <footer><span>Source: {{ result()?.source }}</span><span>Calculated by workflow</span></footer>
+      </section> } @else { <section class="empty-state">
+        <div class="empty-icon">⌁</div>
+        <h3>Your answers will appear here</h3>
+        <p>Start with a question about Green &amp; Clean activity across Nairobi County.</p>
+      </section> }
+    </div>
+    <aside class="side-column">
+      <section class="side-card">
+        <div class="side-heading">
+          <h3>Try asking</h3><span>↗</span>
+        </div><button class="suggestion" (click)="runRecent('How many trees have been planted?')">How many trees have
+          been planted?<b>→</b></button><button class="suggestion"
+          (click)="runRecent('How many staff have been deployed?')">How many staff have been
+          deployed?<b>→</b></button><button class="suggestion"
+          (click)="runRecent('Show tree planting by subcounty')">Show tree planting by subcounty<b>→</b></button>
+      </section>@if (recent().length) { <section class="side-card recent">
+        <div class="side-heading">
+          <h3>Recent questions</h3><span>{{ recent().length }}</span>
+        </div>@for (item of recent(); track item) { <button (click)="runRecent(item)">{{ item }}</button> }
+      </section> }<div class="data-note">
+        <span>✓</span>
+        <p>
+            <b>Available data</b>
+            Tree planting, staff deployment, activity reports, locations, dates,
+            tree types and resource gaps.
+        </p>
+    </div>
+    </aside>
+  </section>
+</main>

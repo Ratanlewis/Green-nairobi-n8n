@@ -1,0 +1,498 @@
+:host {
+    display: block;
+}
+
+.shell {
+    max-width: 1420px;
+    margin: auto;
+    padding: 26px clamp(18px, 4vw, 64px) 64px;
+}
+
+.topbar {
+    height: 72px;
+    display: flex;
+    align-items: center;
+    gap: 12px
+}
+
+.brand-mark {
+    width: 78px;
+    height: 78px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 7px 18px #0f503120
+}
+
+.brand-mark img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 3px
+}
+
+.brand-copy p,
+.eyebrow {
+    margin: 0;
+    font-weight: 800;
+    font-size: 18px;
+    color: #6f8178;
+    letter-spacing: 1.4px
+}
+
+.brand-copy h1 {
+    margin: 2px 0 0;
+    font-size: 25px;
+    letter-spacing: -.4px
+}
+
+.header-note {
+    margin-left: auto;
+    color: #61746b;
+    font-size: 13px
+}
+
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: #39a66c
+}
+
+.avatar {
+    display: grid;
+    place-items: center;
+    margin-left: 18px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #e3ebda;
+    color: #126044;
+    font-size: 12px;
+    font-weight: 800
+}
+
+.hero {
+    margin-top: 32px;
+    min-height: 180px;
+    padding: 34px 42px;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    overflow: hidden;
+    border-radius: 22px;
+    background-image: linear-gradient(100deg,#07452f99 0%,#0d5a3c66 55%,#0d5a3c33 100%), url('/images/nairobi-city-cleaning.jpg');
+    background-position: center, center 58%;
+    background-size: cover, 85%;
+}
+
+.hero .eyebrow {
+    color: #e9c44c
+}
+
+.hero h2 {
+    font-size: clamp(27px, 4vw, 42px);
+    letter-spacing: -1.6px;
+    margin: 9px 0
+}
+
+.hero p:not(.eyebrow) {
+    margin: 0;
+    color: #d5e7dc
+}
+
+.hero-leaf {
+    font-size: 150px;
+    line-height: .8;
+    color: #f5c841;
+    opacity: .85;
+    transform: rotate(-16deg)
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin: 20px 0
+}
+
+.metric-card {
+    background: #fff;
+    border: 1px solid #e4ebe2;
+    border-radius: 16px;
+    padding: 19px;
+    min-height: 142px
+}
+
+.metric-icon {
+    color: #157052;
+    background: #e4f1e8;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    width: 29px;
+    height: 29px;
+    font-weight: bold
+}
+
+.metric-card p {
+    color: #63756c;
+    font-size: 12px;
+    margin: 14px 0 4px
+}
+
+.metric-card strong {
+    font-size: 25px;
+    letter-spacing: -.7px
+}
+
+.metric-card small {
+    display: block;
+    color: #9aa8a0;
+    font-size: 10px;
+    margin-top: 4px
+}
+
+.workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 20px
+}
+
+.ask-card,
+.response-card,
+.side-card,
+.empty-state {
+    background: #fff;
+    border: 1px solid #e4ebe2;
+    border-radius: 18px
+}
+
+.ask-card {
+    padding: 28px
+}
+
+.section-title {
+    display: flex;
+    gap: 12px
+}
+
+.spark {
+    color: #e0a810;
+    font-size: 23px
+}
+
+.section-title h3,
+.response-card h3,
+.side-heading h3,
+.empty-state h3 {
+    margin: 0;
+    font-size: 17px;
+    letter-spacing: -.3px
+}
+
+.section-title p {
+    margin: 5px 0 22px;
+    font-size: 13px;
+    color: #6c7d74
+}
+
+.input-wrap {
+    border: 1px solid #cddbd0;
+    background: #fbfcfa;
+    border-radius: 13px;
+    padding: 10px
+}
+
+.input-wrap:focus-within {
+    border-color: #168058;
+    box-shadow: 0 0 0 3px #16805815
+}
+
+.input-wrap textarea {
+    width: 100%;
+    resize: vertical;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #223b30;
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.55
+}
+
+.input-wrap textarea::placeholder {
+    color: #96a59c
+}
+
+.input-wrap button {
+    float: right;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #fff;
+    border: 0;
+    border-radius: 9px;
+    background: #126244;
+    padding: 10px 14px;
+    font-weight: 700;
+    cursor: pointer
+}
+
+.input-wrap::after {
+    content: "";
+    display: block;
+    clear: both
+}
+
+.input-wrap button:disabled {
+    opacity: .55;
+    cursor: wait
+}
+
+.hint {
+    font-size: 11px;
+    color: #91a097;
+    margin: 13px 0 0
+}
+
+.response-card {
+    margin-top: 20px;
+    padding: 27px 29px 20px;
+    border-top: 3px solid #e4ba2a
+}
+
+.response-heading,
+.side-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between
+}
+
+.verified {
+    background: #e8f5eb;
+    color: #16714e;
+    font-weight: 700;
+    border-radius: 20px;
+    padding: 6px 10px;
+    font-size: 11px
+}
+
+.question-label {
+    color: #75877d;
+    margin: 18px 0 9px;
+    font-size: 13px;
+    font-style: italic
+}
+
+.answer {
+    color: #244238;
+    font-size: 17px;
+    line-height: 1.65;
+    white-space: pre-line;
+    margin: 0 0 22px
+}
+
+.response-card footer {
+    border-top: 1px solid #edf1ed;
+    padding-top: 14px;
+    color: #7b8d83;
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between
+}
+
+.empty-state {
+    margin-top: 20px;
+    min-height: 232px;
+    display: grid;
+    place-content: center;
+    text-align: center;
+    padding: 20px
+}
+
+.empty-icon {
+    color: #e4b728;
+    font-size: 49px
+}
+
+.empty-state p {
+    color: #75867c;
+    max-width: 350px;
+    margin: 8px 0;
+    font-size: 13px
+}
+
+.side-column {
+    display: flex;
+    flex-direction: column;
+    gap: 17px
+}
+
+.side-card {
+    padding: 20px
+}
+
+.side-heading {
+    margin-bottom: 12px
+}
+
+.side-heading span {
+    color: #8b9c91;
+    font-size: 12px
+}
+
+.suggestion,
+.recent button {
+    font: inherit;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    color: #405a4d;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 12px 0;
+    cursor: pointer;
+    border-top: 1px solid #edf1ed
+}
+
+.suggestion b {
+    float: right;
+    color: #d8a919;
+    font-size: 16px
+}
+
+.suggestion:hover,
+.recent button:hover {
+    color: #116044
+}
+
+.data-note {
+    display: flex;
+    gap: 10px;
+    padding: 18px;
+    border-radius: 14px;
+    background: #e3f0df;
+    color: #526b5e;
+    font-size: 12px;
+    line-height: 1.55;
+    border-left: 4px solid #176348;
+    box-shadow: 0 4px 12px rgba(23, 99, 72, 0.08);
+}
+
+
+.data-note span {
+    flex: 0 0 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #176348;
+    color: #fff;
+    font-weight: bold;
+}
+
+.data-note p {
+    margin: 0
+}
+
+.data-note b {
+    display: block;
+    margin-bottom: 4px;
+    color: #176348;
+    font-size: 13px;
+}
+
+.error {
+    display: flex;
+    gap: 9px;
+    color: #a93e35;
+    background: #fff2f0;
+    border: 1px solid #f4d1cc;
+    border-radius: 12px;
+    padding: 13px 16px;
+    margin-top: 15px;
+    font-size: 13px
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #ffffff66;
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin .7s linear infinite
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg)
+    }
+}
+
+@media(max-width:850px) {
+    .workspace {
+        grid-template-columns: 1fr
+    }
+
+    .side-column {
+        display: grid;
+        grid-template-columns: 1fr 1fr
+    }
+
+    .data-note {
+        grid-column: 1/-1
+    }
+
+    .cards {
+        grid-template-columns: repeat(2, 1fr)
+    }
+}
+
+@media(max-width:540px) {
+    .shell {
+        padding: 14px 14px 40px
+    }
+
+    .header-note {
+        display: none
+    }
+
+    .avatar {
+        margin-left: auto
+    }
+
+    .hero {
+        margin-top: 15px;
+        padding: 27px 25px;
+        min-height: 155px
+    }
+
+    .hero-leaf {
+        font-size: 100px
+    }
+
+    .cards,
+    .side-column {
+        grid-template-columns: 1fr
+    }
+
+    .ask-card,
+    .response-card {
+        padding: 20px
+    }
+
+    .response-card footer {
+        gap: 8px;
+        flex-direction: column
+    }
+
+    .hero h2 {
+        font-size: 28px
+    }
+}
