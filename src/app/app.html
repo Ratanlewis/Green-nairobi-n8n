@@ -6,7 +6,10 @@
       <h1>AI Data Assistant</h1>
     </div>
     <div class="header-note"><span class="live-dot"></span> Green &amp; Clean programme data</div>
-    <div class="avatar">NC</div>
+    <button class="share-button" type="button" (click)="sharePage()" aria-label="Share this page" title="Share this page">
+      <span aria-hidden="true">↗</span>
+      <span>Share</span>
+    </button>
   </header>
   <section class="hero">
     <div>
@@ -22,37 +25,75 @@
     </article> }</section> }
   <section class="workspace">
     <div class="main-column">
-      <section class="ask-card">
-        <div class="section-title"><span class="spark">✦</span>
-          <div>
-            <h3>Ask the data assistant</h3>
-            <p>Query trees, staff, activities, locations, dates, and resource needs.</p>
-          </div>
+
+  <!-- RESPONSE SECTION -->
+  @if (hasResponse()) {
+    <section class="response-card">
+      <div class="response-heading">
+        <div>
+          <p class="eyebrow">AI RESPONSE</p>
+          <h3>Here’s what the data shows</h3>
         </div>
-        <div class="input-wrap"><textarea [(ngModel)]="question" (keydown.enter)="onEnter($event)"
-            [disabled]="loading()" placeholder="e.g. How many trees have been planted in Westlands?" rows="3"
-            aria-label="Question for Nairobi County data assistant"></textarea><button (click)="ask()"
-            [disabled]="loading() || !question.trim()">@if (loading()) { <span class="spinner"></span> Working } @else {
-            Ask assistant <span>→</span> }</button></div>
-        <p class="hint">Press Enter to send · Shift + Enter for a new line</p>
-      </section>
-      @if (error()) { <div class="error" role="alert"><span>!</span>{{ error() }}</div> }
-      @if (hasResponse()) { <section class="response-card">
-        <div class="response-heading">
-          <div>
-            <p class="eyebrow">AI RESPONSE</p>
-            <h3>Here’s what the data shows</h3>
-          </div><span class="verified">● Verified</span>
-        </div>
-        <p class="question-label">“{{ question }}”</p>
-        <p class="answer">{{ result()?.answer }}</p>
-        <footer><span>Source: {{ result()?.source }}</span><span>Calculated by workflow</span></footer>
-      </section> } @else { <section class="empty-state">
-        <div class="empty-icon">⌁</div>
-        <h3>Your answers will appear here</h3>
-        <p>Start with a question about Green &amp; Clean activity across Nairobi County.</p>
-      </section> }
+        <span class="verified">● Verified</span>
+      </div>
+
+      <p class="question-label">“{{ question }}”</p>
+      <p class="answer">{{ result()?.answer }}</p>
+    </section>
+  } @else {
+    <section class="empty-state">
+      <div class="empty-icon">⌁</div>
+      <h3>Your answers will appear here</h3>
+      <p>Start with a question about Green &amp; Clean activity across Nairobi County.</p>
+    </section>
+  }
+
+  <!-- QUESTION SECTION -->
+  <section class="ask-card">
+    <div class="section-title">
+      <span class="spark">✦</span>
+      <div>
+        <h3>Ask the data assistant</h3>
+        <p>Query trees, staff, activities, locations, dates, and resource needs.</p>
+      </div>
     </div>
+
+    <div class="input-wrap">
+      <textarea
+        [(ngModel)]="question"
+        (keydown.enter)="onEnter($event)"
+        [disabled]="loading()"
+        placeholder="e.g. How many trees have been planted in Westlands?"
+        rows="3"
+        aria-label="Question for Nairobi County data assistant">
+      </textarea>
+
+      <button
+        (click)="ask()"
+        [disabled]="loading() || !question.trim()">
+
+        @if (loading()) {
+          <span class="spinner"></span> Working
+        } @else {
+          Ask assistant <span>→</span>
+        }
+
+      </button>
+    </div>
+
+    <p class="hint">
+      Press Enter to send · Shift + Enter for a new line
+    </p>
+  </section>
+
+  <!-- ERROR MESSAGE -->
+  @if (error()) {
+    <div class="error" role="alert">
+      <span>!</span>{{ error() }}
+    </div>
+  }
+
+</div>
     <aside class="side-column">
       <section class="side-card">
         <div class="side-heading">
@@ -77,3 +118,4 @@
     </aside>
   </section>
 </main>
+<p class="share-status" aria-live="polite">{{ shareStatus() }}</p>
