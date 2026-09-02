@@ -329,6 +329,25 @@
     margin: 0 0 22px
 }
 
+.response-chart {
+    display: block;
+    width: 100%;
+    max-width: 900px;
+    height: auto;
+    margin-top: 6px;
+    border: 1px solid #e4ebe2;
+    border-radius: 12px
+}
+
+.chart-canvas {
+    position: relative;
+    min-height: 280px
+}
+
+.chart-canvas canvas {
+    max-height: 420px
+}
+
 .response-card footer {
     border-top: 1px solid #edf1ed;
     padding-top: 14px;

@@ -38,7 +38,16 @@
       </div>
 
       <p class="question-label">“{{ question }}”</p>
-      <p class="answer">{{ result()?.answer }}</p>
+      @for (part of result()?.parts ?? []; track $index) {
+        @if (part.type === 'text') {
+          <p class="answer">{{ part.content }}</p>
+        } @else {
+          <div class="response-chart chart-canvas"><canvas #chartCanvas role="img" aria-label="Green &amp; Clean Nairobi visualization"></canvas></div>
+        }
+      }
+      @if (result()?.chartUrl; as chartUrl) {
+        <img class="response-chart" [src]="chartUrl" alt="Green &amp; Clean Nairobi visualization">
+      }
     </section>
   } @else {
     <section class="empty-state">
@@ -111,8 +120,8 @@
         <span>✓</span>
         <p>
             <b>Available data</b>
-            Tree planting, staff deployment, activity reports, locations, dates,
-            tree types and resource gaps.
+            Greening Initiative: tree planting, staff deployment, activity reports, locations, dates, tree types and resource gaps.<br>
+            Public Sensitization: activities, attendees, partners, key messages, outputs, outcomes, activity types and locations.
         </p>
     </div>
     </aside>

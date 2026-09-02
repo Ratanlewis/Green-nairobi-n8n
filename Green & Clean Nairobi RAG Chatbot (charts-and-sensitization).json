@@ -1,0 +1,602 @@
+{
+  "name": "Green & Clean Nairobi RAG Chatbot – Charts & Sensitization",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Sanitize sessionId to prevent injection\nconst rawSessionId = (input.sessionId || input.session_id || 'default').toString();\nconst sessionId = rawSessionId.replace(/[^a-zA-Z0-9_-]/g, '') || 'default';\n\n// Guard against oversized/malicious input\nconst maxQuestionLength = 500;\nlet question = (input.chatInput || input.question || input.message || '').toString().trim();\nif (question.length > maxQuestionLength) {\n  question = question.slice(0, maxQuestionLength);\n}\n\n// ================= CONFIG — edit these =================\nconst config = {\n  interpModel: 'claude-haiku-4-5',      // Already using this\n  synthModel:  'claude-haiku-4-5',      // ← Change from sonnet-4-6 to haiku-4-5\n  maxTokensInterp: 400,                  // Reduced from 600\n  maxTokensSynth:  500,                  // Reduced from 800\n  // ... rest of config\n};\n// ======================================================\n\nconst staticData = $getWorkflowStaticData('global');\nstaticData.memory = staticData.memory || {};\nconst history = staticData.memory[sessionId] || [];\nconst nowISO = new Date().toISOString().slice(0,10);   // today's date, for resolving relative time\n\nreturn [{ json: { sessionId, question, config, history, nowISO } }];"
+      },
+      "id": "06b0df6a-6e8c-4127-8754-ce3779fe4263",
+      "name": "1. Init & Load Memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst today = d.nowISO || new Date().toISOString().slice(0,10);\nconst historyText = (d.history || []).map(t => 'User: ' + t.user + '\\nAssistant: ' + t.assistant).join('\\n');\n\n// ================= CATALOG FOR BOTH SHEETS =================\nconst CATALOG = [\n  \"NUMERIC METRICS (sum/avg/rank/trend/compare):\",\n  \"  staff_deployed (number of staff deployed for sensitization/cleanup activities).\",\n  \"  attendees (number of people who attended sensitization/cleanup activities).\",\n  \"  trees_planted (total trees planted - only in Greening Initiative sheet).\",\n  \"  reports = count of activities/records (use for 'how many activities' or 'how many reports').\",\n  \"\",\n  \"TEXT-FREQUENCY METRICS (use operation 'breakdown', groupBy null -> ranks most-mentioned items):\",\n  \"  resources_lacking (what resources/items teams request most).\",\n  \"  key_messages (main messages shared during sensitization).\",\n  \"  partners (organizations involved in activities).\",\n  \"  activity_category (type of activity: Cleanup Exercises, Public Sensitization, Public Baraza, etc.).\",\n  \"  tree_type (type of trees planted - only in Greening Initiative sheet).\",\n  \"\",\n  \"DIMENSIONS (groupBy / filter / breakdown):\",\n  \"  subcounty (Mathare, Kasarani, Embakasi North, Ruaraka, Westlands, etc.).\",\n  \"  ward (Kiamaiko, Mabatini, Hospital, Dandora, etc.).\",\n  \"  location (specific road/place).\",\n  \"  date (a single day), week, month.\",\n  \"  activity_type (Cleanup Exercises, Community Sensitizations, Public Baraza, etc.).\",\n  \"\",\n  \"SHEETS AVAILABLE:\",\n  \"  'Greening Initiative' - main sheet with tree planting, staff, resources, cleanup activities.\",\n  \"  'Sensitization Programme' - specific sheet for public sensitization data.\",\n  \"\",\n  \"SHEET SELECTION RULES:\",\n  \"  - If user mentions 'public sensitization', 'sensitization activities', 'awareness', 'sensitize' -> use 'Sensitization Programme'\",\n  \"  - If user mentions 'tree', 'planting', 'greening', 'cleanup', 'staff', 'resources' -> use 'Greening Initiative'\",\n  \"  - If user doesn't specify, default to 'Greening Initiative'\"\n].join('\\n');\n\nconst EXAMPLES = [\n  // ===== Greening Initiative Sheet Examples =====\n  // Tree planting queries\n  '\"trees planted in Westlands\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"trees_planted\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Westlands\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"trees planted in Kayole South ward\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"trees_planted\",\"groupBy\":\"ward\",\"filters\":[{\"field\":\"ward\",\"value\":\"Kayole South\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"which subcounty planted the most trees\" -> {\"type\":\"aggregation\",\"operation\":\"rank\",\"metric\":\"trees_planted\",\"groupBy\":\"subcounty\",\"order\":\"desc\",\"limit\":1,\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"total trees planted in Kasarani\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"trees_planted\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Kasarani\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"breakdown of trees by type\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"trees_planted\",\"groupBy\":\"tree_type\",\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  \n  // Staff and deployment queries (Greening Initiative)\n  '\"how many staff deployed in Mathare\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"staff_deployed\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Mathare\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"total staff deployed in Kasarani\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"staff_deployed\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Kasarani\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"staff deployed in Westlands for cleanup\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"staff_deployed\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Westlands\"},{\"field\":\"activity_type\",\"value\":\"Cleanup Exercises\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  \n  // Attendee queries (Greening Initiative)\n  '\"how many people attended sensitization in Mathare\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"attendees\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Mathare\"},{\"field\":\"activity_type\",\"value\":\"Community Sensitizations\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"total attendees for cleanup exercises\" -> {\"type\":\"aggregation\",\"operation\":\"sum\",\"metric\":\"attendees\",\"groupBy\":\"activity_type\",\"filters\":[{\"field\":\"activity_type\",\"value\":\"Cleanup Exercises\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"which activity had the most attendees\" -> {\"type\":\"aggregation\",\"operation\":\"rank\",\"metric\":\"attendees\",\"groupBy\":\"activity_type\",\"order\":\"desc\",\"limit\":5,\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  \n  // Resource queries (Greening Initiative)\n  '\"what resources are most lacking\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"resources_lacking\",\"groupBy\":null,\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  '\"list all resources needed in Kasarani\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"resources_lacking\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Kasarani\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  \n  // Cleanup queries (Greening Initiative)\n  '\"list all cleanup exercises\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"activity_type\",\"groupBy\":\"activity_type\",\"filters\":[{\"field\":\"activity_type\",\"value\":\"Cleanup Exercises\"}],\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}',\n  '\"breakdown of activities by type\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"activity_type\",\"groupBy\":\"activity_type\",\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}',\n  \n  // Activity count queries (Greening Initiative)\n  '\"how many activities in Dandora\" -> {\"type\":\"aggregation\",\"operation\":\"count\",\"metric\":\"reports\",\"groupBy\":\"ward\",\"filters\":[{\"field\":\"ward\",\"value\":\"Dandora\"}],\"mathRequired\":true,\"sheet\":\"Greening Initiative\"}',\n  \n  // ===== Sensitization Programme Sheet Examples =====\n  '\"sensitization activities\" -> {\"type\":\"lookup\",\"operation\":\"list\",\"metric\":\"reports\",\"filters\":[{\"field\":\"activity_type\",\"value\":\"Community Sensitizations\"}],\"mathRequired\":false,\"sheet\":\"Sensitization Programme\"}',\n  '\"show me Sensitization Programme data\" -> {\"type\":\"lookup\",\"operation\":\"list\",\"metric\":\"reports\",\"sheet\":\"Sensitization Programme\",\"mathRequired\":false,\"sheet\":\"Sensitization Programme\"}',\n  '\"how many sensitization activities\" -> {\"type\":\"aggregation\",\"operation\":\"count\",\"metric\":\"reports\",\"sheet\":\"Sensitization Programme\",\"mathRequired\":true,\"sheet\":\"Sensitization Programme\"}',\n  '\"sensitization in Mathare\" -> {\"type\":\"lookup\",\"operation\":\"list\",\"metric\":\"reports\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Mathare\"}],\"mathRequired\":false,\"sheet\":\"Sensitization Programme\"}',\n  '\"key messages from sensitization\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"key_messages\",\"mathRequired\":false,\"sheet\":\"Sensitization Programme\"}',\n  '\"who partnered in sensitization\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"partners\",\"mathRequired\":false,\"sheet\":\"Sensitization Programme\"}',\n  '\"public baraza activities\" -> {\"type\":\"lookup\",\"operation\":\"list\",\"metric\":\"reports\",\"filters\":[{\"field\":\"activity_type\",\"value\":\"Public Baraza\"}],\"mathRequired\":false,\"sheet\":\"Sensitization Programme\"}',\n  \n  // General queries (automatic sheet detection)\n  '\"activities this month\" -> {\"type\":\"lookup\",\"operation\":\"list\",\"metric\":\"reports\",\"period\":\"this_month\",\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}',\n  '\"activities in February 2026\" -> {\"type\":\"lookup\",\"operation\":\"list\",\"metric\":\"reports\",\"dateFrom\":\"2026-02-01\",\"dateTo\":\"2026-02-28\",\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}',\n  \n  // Partner queries\n  '\"which organizations partnered in Mathare\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"partners\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Mathare\"}],\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}',\n  \n  // Outcomes and outputs\n  '\"what were the outputs of cleanup activities\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"outputs\",\"groupBy\":null,\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}',\n  '\"outcomes of activities in Mathare\" -> {\"type\":\"distribution\",\"operation\":\"breakdown\",\"metric\":\"outcomes\",\"groupBy\":\"subcounty\",\"filters\":[{\"field\":\"subcounty\",\"value\":\"Mathare\"}],\"mathRequired\":false,\"sheet\":\"Greening Initiative\"}'\n].join('\\n');\n\nconst system = [\n  \"You are the query-interpretation stage of an executive analytics chatbot for Nairobi's Green & Clean program.\",\n  \"You have access to TWO Google Sheets: 'Greening Initiative' and 'Sensitization Programme'.\",\n  \"Map the user's plain-language question onto ONE metric and (optionally) a dimension from the catalog, then classify it.\",\n  \"Output ONLY minified JSON. No prose, no markdown fences.\",\n  \"\",\n  \"CATALOG:\", CATALOG, \"\",\n  \"SCHEMA: {\\\"type\\\":\\\"lookup|aggregation|comparison|trend|distribution|ratio|rate\\\",\\\"operation\\\":\\\"rank|sum|avg|count|min|max|breakdown|rate|ratio|trend|difference|list\\\",\\\"metric\\\":\\\"<catalog metric or reports>\\\",\\\"secondaryMetric\\\":\\\"<numeric metric or null>\\\",\\\"groupBy\\\":\\\"<dimension or null>\\\",\\\"filters\\\":[{\\\"field\\\":\\\"<dimension>\\\",\\\"value\\\":\\\"<text>\\\"}],\\\"period\\\":\\\"today|yesterday|this_week|last_week|this_month|last_month|last_7_days|last_30_days|last_90_days|this_quarter|last_quarter|this_year|last_year|ytd|all|null\\\",\\\"dateFrom\\\":\\\"YYYY-MM-DD|null\\\",\\\"dateTo\\\":\\\"YYYY-MM-DD|null\\\",\\\"granularity\\\":\\\"day|week|month|null\\\",\\\"order\\\":\\\"desc|asc\\\",\\\"limit\\\":10,\\\"mathRequired\\\":true,\\\"sheet\\\":\\\"Greening Initiative|Sensitization Programme\\\"}\",\n  \"\",\n  \"SHEET SELECTION RULES (MOST IMPORTANT):\",\n  \"1. If user mentions 'public sensitization', 'sensitization activities', 'sensitize', 'awareness', 'public baraza' -> sheet: 'Sensitization Programme'\",\n  \"2. If user mentions 'tree', 'planting', 'greening', 'cleanup', 'clean up', 'staff', 'resources', 'deployed' -> sheet: 'Greening Initiative'\",\n  \"3. If user doesn't specify, default to 'Greening Initiative'\",\n  \"\",\n  \"METRIC MAPPING:\",\n  \"- 'staff' or 'deployed' or 'personnel' -> staff_deployed\",\n  \"- 'attend' or 'people' or 'participants' -> attendees\", \n  \"- 'resource' or 'need' or 'lack' -> resources_lacking\",\n  \"- 'partner' or 'organization' or 'collaborate' -> partners\",\n  \"- 'message' or 'key message' or 'sensitize' -> key_messages\",\n  \"- 'output' or 'result' or 'achieve' -> outputs\",\n  \"- 'outcome' or 'impact' or 'effect' -> outcomes\",\n  \"- 'activity' or 'exercise' or 'sensitization' or 'cleanup' or 'baraza' -> reports\",\n  \"- 'tree' or 'plant' or 'greening' -> trees_planted\",\n  \"- 'type' or 'species' -> tree_type\",\n  \"\",\n  \"RULES:\",\n  \"1. mathRequired=true unless it is a pure single-record lookup/list.\",\n  \"2. metric defaults to reports if counting activities, staff_deployed for staff questions, attendees for attendance questions.\",\n  \"3. Put every named place/category into filters (field = the matching dimension).\",\n  \"4. For time: if the user mentions a month (e.g., 'February 2026'), set dateFrom/dateTo explicitly. For relative time, set the period token.\",\n  \"5. TIME: today is \" + today + \". For a RELATIVE time phrase (last month, this week, past 30 days...) set \\\"period\\\" to the matching token. For explicit month/year, set dateFrom/dateTo.\",\n  \"6. SHEET SELECTION: If the user says 'Public Sensitization', 'Sensitization Programme', use sheet: 'Sensitization Programme'. Otherwise use sheet: 'Greening Initiative'.\",\n  \"\",\n  \"EXAMPLES:\", EXAMPLES\n].join('\\n');\n\nconst userMsg = (historyText ? ('Conversation so far:\\n' + historyText + '\\n\\n') : '') + 'New question: ' + d.question;\n\nconst interpBody = {\n  model: d.config.interpModel,\n  max_tokens: d.config.maxTokensInterp,\n  temperature: 0,\n  system,\n  messages: [{ role: 'user', content: userMsg }]\n};\n\nreturn [{ json: Object.assign({}, d, { interpBody }) }];"
+      },
+      "id": "0edd5e40-7cef-4ca8-a113-b3edf84f50b2",
+      "name": "2. Build Interpretation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.interpBody }}",
+        "options": {}
+      },
+      "id": "ad574aa0-05bc-4871-ade4-16e1d6fb8311",
+      "name": "3. Claude: Interpret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        176,
+        240
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "pSPWEsSAti5YnJHk",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst carried = $('2. Build Interpretation Request').first().json;\nlet text = '';\ntry { text = (resp.content || []).map(b => b.text || '').join(''); } catch (e) {}\nlet intent;\ntry { const m = text.match(/\\{[\\s\\S]*\\}/); intent = JSON.parse(m ? m[0] : text); }\ncatch (e) { \n  intent = { \n    type:'aggregation', \n    operation:'count', \n    metric:'reports', \n    groupBy:'subcounty', \n    filters:[], \n    order:'desc', \n    limit:10, \n    mathRequired:true \n  }; \n}\n\nintent.filters = Array.isArray(intent.filters) ? intent.filters.filter(f => f && f.field) : [];\nintent.metric = intent.metric || 'reports';\nintent.operation = intent.operation || 'count';\nintent.order = intent.order || 'desc';\nintent.limit = intent.limit || 10;\nintent.mathRequired = intent.mathRequired !== false;\nif (Array.isArray(intent.subcounties)) intent.filters = intent.filters.concat(intent.subcounties.map(s => ({field:'subcounty', value:s})));\n\n// ================= SHEET DETECTION =================\nfunction detectSheet(question) {\n  const q = question.toLowerCase();\n\n  // Use explicit programme terms first. Generic terms such as attendees and\n  // partners remain available on both datasets, so they must not force a sheet.\n  const sensKeywords = [\n    'public sensitization', 'public sensitisation', 'sensitization programme',\n    'sensitisation programme', 'community sensitization', 'community sensitisation',\n    'sensitization activity', 'sensitisation activity', 'sensitize', 'sensitise',\n    'awareness campaign', 'awareness activity', 'public baraza', 'key message',\n    'sensitatization'\n  ];\n  \n  for (const kw of sensKeywords) {\n    if (q.includes(kw)) {\n      console.log('Detected Sensitization Programme sheet');\n      return 'Sensitization Programme';\n    }\n  }\n  \n  // Check for Greening Initiative keywords\n  const greenKeywords = [\n    'tree', 'plant', 'greening', 'cleanup', 'clean up',\n    'staff', 'resources', 'deployed', 'seedlings'\n  ];\n  \n  for (const kw of greenKeywords) {\n    if (q.includes(kw)) {\n      console.log('Detected Greening Initiative sheet');\n      return 'Greening Initiative';\n    }\n  }\n  \n  // Default\n  console.log('Defaulting to Greening Initiative sheet');\n  return 'Greening Initiative';\n}\n\n// ================= DETERMINE SHEET =================\nconst detectedSheet = detectSheet(carried.question);\n\n// Set the sheet in the intent\nintent.sheet = detectedSheet;\n\n// ================= DATE RESOLUTION =================\nconst nowISO = carried.nowISO || new Date().toISOString().slice(0,10);\nfunction isod(dt){ return dt.toISOString().slice(0,10); }\nfunction mk(Y,M,D){ return new Date(Date.UTC(Y,M,D)); }\nfunction resolvePeriod(period, ref){\n  const now=new Date(ref+'T00:00:00Z'); const y=now.getUTCFullYear(), m=now.getUTCMonth(), d=now.getUTCDate();\n  const sow=dt=>{ const day=(dt.getUTCDay()+6)%7; const s=new Date(dt); s.setUTCDate(dt.getUTCDate()-day); return s; };\n  switch(String(period||'').toLowerCase()){\n    case 'today': return {from:ref,to:ref,label:'today'};\n    case 'yesterday': { const t=mk(y,m,d-1); return {from:isod(t),to:isod(t),label:'yesterday'}; }\n    case 'this_week': return {from:isod(sow(now)),to:ref,label:'this week'};\n    case 'last_week': { const s=sow(now); const ls=new Date(s); ls.setUTCDate(s.getUTCDate()-7); const le=new Date(s); le.setUTCDate(s.getUTCDate()-1); return {from:isod(ls),to:isod(le),label:'last week'}; }\n    case 'this_month': return {from:isod(mk(y,m,1)),to:ref,label:'this month'};\n    case 'last_month': return {from:isod(mk(y,m-1,1)),to:isod(mk(y,m,0)),label:'last month'};\n    case 'last_7_days': return {from:isod(mk(y,m,d-6)),to:ref,label:'the last 7 days'};\n    case 'last_30_days': return {from:isod(mk(y,m,d-29)),to:ref,label:'the last 30 days'};\n    case 'last_90_days': return {from:isod(mk(y,m,d-89)),to:ref,label:'the last 90 days'};\n    case 'this_quarter': { const q=Math.floor(m/3); return {from:isod(mk(y,q*3,1)),to:ref,label:'this quarter'}; }\n    case 'last_quarter': { let q=Math.floor(m/3)-1, yy=y; if(q<0){q=3;yy--;} return {from:isod(mk(yy,q*3,1)),to:isod(mk(yy,q*3+3,0)),label:'last quarter'}; }\n    case 'this_year': return {from:isod(mk(y,0,1)),to:ref,label:'this year'};\n    case 'ytd': return {from:isod(mk(y,0,1)),to:ref,label:'year to date'};\n    case 'last_year': return {from:isod(mk(y-1,0,1)),to:isod(mk(y-1,11,31)),label:'last year'};\n    default: return null;\n  }\n}\nfunction prettyRange(from,to){\n  const M=['January','February','March','April','May','June','July','August','September','October','November','December'];\n  if(!from&&!to) return 'all dates';\n  if(from&&to){\n    const [fy,fm,fd]=from.split('-').map(Number), [ty,tm,td]=to.split('-').map(Number);\n    if(from===to) return from;\n    if(fd===1&&fy===ty&&fm===tm){ const last=new Date(Date.UTC(ty,tm,0)).getUTCDate(); if(td===last) return M[fm-1]+' '+fy; }\n    if(fm===1&&fd===1&&tm===12&&td===31&&fy===ty) return String(fy);\n    return from+' to '+to;\n  }\n  return from ? ('since '+from) : ('up to '+to);\n}\nif (!intent.dateFrom && !intent.dateTo && intent.period && intent.period!=='all'){\n  const p=resolvePeriod(intent.period, nowISO);\n  if(p){ intent.dateFrom=p.from; intent.dateTo=p.to; intent.periodLabel=p.label; }\n}\nif (!intent.periodLabel) intent.periodLabel = prettyRange(intent.dateFrom, intent.dateTo);\n\n// ================= LOGGING =================\nconsole.log('Detected Sheet:', detectedSheet);\nconsole.log('Intent:', JSON.stringify(intent, null, 2));\n\nreturn [{ \n  json: { \n    sessionId: carried.sessionId, \n    question: carried.question, \n    config: carried.config, \n    history: carried.history, \n    nowISO, \n    intent,\n    detectedSheet: detectedSheet\n  } \n}];"
+      },
+      "id": "b0db4817-d1de-4961-9226-b1633fb0f3ed",
+      "name": "4. Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('4. Parse Intent').first().json;\nconst config = base.config;\n\nfunction num(v){ if(v==null||v==='')return null; const m=String(v).match(/-?\\d+(?:\\.\\d+)?/); if(!m)return null; const n=Number(m[0]); return isNaN(n)?null:n; }\nconst CLAMP = { staff_deployed:2000, trees_planted:100000, attendees:10000 };\nfunction cl(field,v){ if(v==null)return null; const mx=CLAMP[field]; if(mx!=null&&(v<0||v>mx))return null; return v; }\nfunction goodYear(s){ if(!s)return null; const y=+s.slice(0,4); return (y>=2023&&y<=2032)?s:null; }\nfunction iso(v){ if(v==null||v==='')return null; let s=String(v).trim();\n  if(/^\\d{4}-\\d{2}-\\d{2}/.test(s))return goodYear(s.slice(0,10));\n  const n=Number(s); if(!isNaN(n)&&n>20000&&n<80000){return goodYear(new Date(Date.UTC(1899,11,30)+n*86400000).toISOString().slice(0,10));}\n  const m=s.match(/^(\\d{1,2})[\\/\\-.](\\d{1,2})[\\/\\-.](\\d{2,4})/);\n  if(m){ let a=+m[1], b=+m[2], y=+m[3]; if(y<100)y+=2000; let day,mon;\n    if(a>12){day=a;mon=b;} else if(b>12){day=b;mon=a;} else {day=a;mon=b;}\n    const dt=new Date(Date.UTC(y,mon-1,day)); return isNaN(dt.getTime())?null:goodYear(dt.toISOString().slice(0,10)); }\n  const dd=new Date(s); return isNaN(dd.getTime())?null:goodYear(dd.toISOString().slice(0,10)); }\n\nfunction normalizeRow(row, sheetName) {\n  function getValue(keys) {\n    for (const key of keys) {\n      if (row[key] !== undefined && row[key] !== null && row[key] !== '') {\n        return row[key];\n      }\n      for (const colName of Object.keys(row)) {\n        if (colName.toLowerCase() === key.toLowerCase()) {\n          if (row[colName] !== undefined && row[colName] !== null && row[colName] !== '') {\n            return row[colName];\n          }\n        }\n      }\n    }\n    return null;\n  }\n\n  let dateVal = null;\n  const dateKeys = ['Enter Date', 'Date', 'enter date', 'A'];\n  for (const key of dateKeys) {\n    const val = getValue([key]);\n    if (val) { dateVal = val; break; }\n  }\n\n  let subcounty = getValue(['SubCounty', 'Subcounty', 'subcounty', 'B']) || '';\n  let ward = getValue(['Choose your ward', 'Ward', 'ward', 'C']) || '';\n  let staff = getValue(['Number of staff deployed', 'Staff Deployed', 'staff_deployed', 'D']);\n  if (staff && typeof staff === 'string') staff = num(staff);\n  let location = getValue(['Indicate Road/Location/Street Name', 'Location', 'location', 'E']) || '';\n  let activityType = '';\n  let attendees = null;\n  let partners = '';\n  let keyMessages = '';\n  let outputs = '';\n  let outcomes = '';\n  let treesPlanted = null;\n  let treeType = '';\n  let resourcesLacking = '';\n\n  // ===== SHEET-SPECIFIC: Greening Initiative =====\n  if (sheetName === 'Greening Initiative' || sheetName === 'Environmental Maintenance') {\n    activityType = getValue([\n      'Select activity category (Choose the main activity type and provide details in the relevant section.)',\n      'Activity Type',\n      'activity_type',\n      'F'\n    ]) || '';\n\n    treesPlanted = getValue([\n      'Number of trees planted (Enter the total number of seedlings planted during the activity. Only input numerical values, eg. 13)',\n      'Number of trees planted',\n      'Trees Planted',\n      'trees_planted',\n      'Tree seedlings planted',\n      'Trees planted',\n      'tree_planted'\n    ]);\n    if (treesPlanted && typeof treesPlanted === 'string') {\n      treesPlanted = num(treesPlanted);\n    }\n\n    treeType = getValue([\n      'Type of trees',\n      'Tree Type',\n      'tree_type',\n      'Type of tree',\n      'Species',\n      'tree_species'\n    ]) || '';\n\n    const resourceKeys = [\n      'Which resources are lacking? Please list the resources  needed and their quantities.  ',\n      'Which resources are lacking? Please list the resources needed and their quantities.',\n      'resources_lacking',\n      'Resources',\n      'I'\n    ];\n    let resources = [];\n    for (const key of resourceKeys) {\n      const val = getValue([key]);\n      if (val && String(val).trim()) {\n        resources.push(String(val).trim());\n      }\n    }\n    resourcesLacking = resources.join(' | ');\n    if (!resourcesLacking) {\n      for (const colName of Object.keys(row)) {\n        if (colName.toLowerCase().includes('resource') || colName.toLowerCase().includes('lack')) {\n          const val = row[colName];\n          if (val && String(val).trim()) {\n            resourcesLacking = String(val).trim();\n            break;\n          }\n        }\n      }\n    }\n  }\n\n  // ===== SHEET-SPECIFIC: Sensitization Programme =====\n  if (sheetName === 'Sensitization Programme') {\n    activityType = getValue([\n      'Type of public sensitization activity conducted',\n      'Activity Type',\n      'activity_type',\n      'F'\n    ]) || '';\n\n    attendees = getValue([\n      'Number of attendees ',\n      'Number of attendees',\n      'Attendees',\n      'attendees',\n      'G'\n    ]);\n    if (attendees && typeof attendees === 'string') attendees = num(attendees);\n\n    partners = getValue([\n      'Name the partners involved in the sensitization activity',\n      'Partners',\n      'partners',\n      'H'\n    ]) || '';\n\n    keyMessages = getValue([\n      'What were the key messages pushed during the sensitization activity ',\n      'What were the key messages pushed during the sensitization activity',\n      'Key Messages',\n      'key_messages',\n      'I'\n    ]) || '';\n\n    outputs = getValue([\n      'Output of the sensitization activity',\n      'Outputs',\n      'outputs',\n      'J'\n    ]) || '';\n\n    outcomes = getValue([\n      'Outcomes of the sensitization activity',\n      'Outcomes',\n      'outcomes',\n      'K'\n    ]) || '';\n\n    const resourceKeys = [\n      'Which resources are lacking? Please list the resources needed and their quantities.',\n      'resources_lacking',\n      'Resources'\n    ];\n    let resources = [];\n    for (const key of resourceKeys) {\n      const val = getValue([key]);\n      if (val && String(val).trim()) {\n        resources.push(String(val).trim());\n      }\n    }\n    resourcesLacking = resources.join(' | ');\n  }\n\n  // ===== FALLBACK =====\n  if (!activityType) {\n    activityType = getValue([\n      'Activity Type',\n      'activity_type',\n      'Type of activity'\n    ]) || '';\n  }\n\n  return {\n    subcounty: String(subcounty).trim(),\n    ward: String(ward).trim(),\n    location: String(location).trim(),\n    date: iso(dateVal),\n    activity_type: String(activityType).trim(),\n    tree_type: String(treeType).trim(),\n    staff_deployed: cl('staff_deployed', staff),\n    attendees: cl('attendees', attendees),\n    trees_planted: cl('trees_planted', treesPlanted),\n    resources_lacking: resourcesLacking,\n    partners: String(partners).trim(),\n    key_messages: String(keyMessages).trim(),\n    outputs: String(outputs).trim(),\n    outcomes: String(outcomes).trim(),\n    sheet: sheetName || 'Greening Initiative',\n    _original: row\n  };\n}\n\n// ================= LOAD DATA =================\nlet allRows = [];\nlet usedSource = 'none';\nlet sheetName = '';\n\nconst targetSheet = base.detectedSheet || 'Greening Initiative';\nconsole.log('Target Sheet:', targetSheet);\n\nif (targetSheet === 'Sensitization Programme') {\n  try {\n    const spData = $('5c. Sensitization Programs ').all().map(i => i.json);\n    if (spData && spData.length > 0) {\n      allRows = spData.map(row => normalizeRow(row, 'Sensitization Programme'));\n      sheetName = 'Sensitization Programme';\n      usedSource = 'google sheets (5c. Sensitization Programs)';\n    }\n  } catch(e) { \n    console.log('Could not load Sensitization Programme sheet:', e.message);\n  }\n} else {\n  try {\n    const giData = $('5a. Greening Initiatives').all().map(i => i.json);\n    if (giData && giData.length > 0) {\n      allRows = giData.map(row => normalizeRow(row, 'Greening Initiative'));\n      sheetName = 'Greening Initiative';\n      usedSource = 'google sheets (5a. Greening Initiatives)';\n    }\n  } catch(e) { \n    console.log('Could not load Greening Initiative sheet:', e.message);\n  }\n}\n\nif (allRows.length === 0) {\n  try {\n    const otherData = $('5b. Env. Maintenance by Ward').all().map(i => i.json);\n    if (otherData && otherData.length > 0) {\n      allRows = otherData.map(row => normalizeRow(row, 'Environmental Maintenance'));\n      usedSource = 'google sheets (5b. Env. Maintenance)';\n      sheetName = 'Environmental Maintenance';\n    }\n  } catch(e) { \n    console.log('Could not load fallback sheet:', e.message);\n  }\n}\n\nif (allRows.length === 0) {\n  try {\n    const wasteData = $('5d. Wasteload collection').all().map(i => i.json);\n    if (wasteData && wasteData.length > 0) {\n      allRows = wasteData.map(row => normalizeRow(row, 'Wasteload Collection'));\n      usedSource = 'google sheets (5d. Wasteload)';\n      sheetName = 'Wasteload Collection';\n    }\n  } catch(e) { \n    console.log('Could not load waste sheet:', e.message);\n  }\n}\n\nconsole.log('Total rows loaded:', allRows.length);\nconsole.log('Source:', usedSource);\n\n// ===== DEBUG =====\nconst rowsWithTrees = allRows.filter(r => r.trees_planted !== null && r.trees_planted !== undefined);\nconsole.log('Rows with trees_planted values:', rowsWithTrees.length);\nif (rowsWithTrees.length > 0) {\n  console.log('Sample tree data:', JSON.stringify(rowsWithTrees.slice(0, 5).map(r => ({\n    date: r.date,\n    subcounty: r.subcounty,\n    trees: r.trees_planted\n  })), null, 2));\n} else {\n  console.log('⚠️ WARNING: No trees_planted values found in any rows!');\n}\n\n// ===== RETURN PROPERLY =====\n// Return an array with one object containing all rows\nreturn [{\n  json: Object.assign({}, base, { \n    rows: allRows, \n    usedSource, \n    counts: { incoming: allRows.length },\n    detectedSheet: sheetName\n  })\n}];"
+      },
+      "id": "6cde5d61-8ec9-4285-912e-416118263af2",
+      "name": "6. Resolve Data Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst intent = d.intent;\nfunction weekStart(isoStr){ const dt=new Date(isoStr+'T00:00:00Z'); const day=(dt.getUTCDay()+6)%7; dt.setUTCDate(dt.getUTCDate()-day); return dt.toISOString().slice(0,10); }\nlet rows = (d.rows || []).map(r => Object.assign({}, r, { month: r.date ? r.date.slice(0,7) : null, week: r.date ? weekStart(r.date) : null }));\n\nconst NUMERIC=['waste_loads','loads_remaining','staff_deployed','attendees','trees_planted','seedlings','bins_total','bins_emptied','trucks_allocated','arrests_total'];\nconst BOOLEAN=['collection_complete','factual_accurate','has_evidence','night_surveillance','arrests_made'];\nconst TEXTFREQ=['resources_lacking','challenges','key_messages'];\nconst MULTI=['greening_activity','sensitization_type','tree_type','incident_category','environmental_activity','vehicle_type','waste_responsible','partners','resources_lacking','challenges'];\n\nconst metric = intent.metric || 'waste_loads';\nlet op = intent.operation || 'rank';\nlet groupBy = (intent.groupBy===undefined) ? 'subcounty' : intent.groupBy;\nif (['rank','sum','avg','min','max','count','rate','difference'].includes(op) && !groupBy) groupBy='subcounty';\n\n// ---- filters ----\nlet filtered = rows;\nif (intent.dateFrom) filtered = filtered.filter(r=>r.date && r.date>=intent.dateFrom);\nif (intent.dateTo)   filtered = filtered.filter(r=>r.date && r.date<=intent.dateTo);\nfor (const f of (intent.filters||[])){\n  const fld=f.field, val=String(f.value||'').toLowerCase().trim();\n  if(!fld||!val) continue;\n  // Nairobi's admin hierarchy means a place name tagged as 'ward' by the interpreter might actually\n  // be a subcounty name (e.g. 'Westlands' is a subcounty, not a ward -- its wards are Kitisuru,\n  // Parklands/Highridge, Karura, Kangemi, Mountain View), or vice versa. Check both geography\n  // fields together so a correct place name isn't dropped just because it landed in the 'wrong' field.\n  if (fld==='ward' || fld==='subcounty'){\n    filtered = filtered.filter(r => String(r.ward||'').toLowerCase().includes(val) || String(r.subcounty||'').toLowerCase().includes(val));\n  } else {\n    filtered = filtered.filter(r => String(r[fld]||'').toLowerCase().includes(val));\n  }\n}\n\nfunction metricValue(r){ if(metric==='reports')return 1; if(NUMERIC.includes(metric))return r[metric]||0; if(BOOLEAN.includes(metric))return r[metric]?1:0; return 0; }\nfunction tokens(v){ return String(v||'').split(/\\s*[|,;\\n]\\s*/).map(x=>x.trim()).filter(Boolean); }\nfunction keysFor(r, dim){ if(!dim) return ['All']; if(MULTI.includes(dim)){ const t=tokens(r[dim]); return t.length?t:['(none)']; } return [String(r[dim]||'(none)').trim()||'(none)']; }\n\nconst math = { metric, operation:op, groupBy, field:metric, recordCount:filtered.length, dataSource:d.usedSource,\n  period:{ from:intent.dateFrom||null, to:intent.dateTo||null, label:intent.periodLabel||'all dates' }, pre_computed:true };\n\n// ---------- TEXT-FREQUENCY breakdown ----------\nif (op==='breakdown' && TEXTFREQ.includes(metric) && !groupBy){\n  const freq={}; for(const r of filtered){ for(const t of tokens(r[metric])){ const k=t; freq[k]=(freq[k]||0)+1; } }\n  let arr=Object.entries(freq).map(([group,value])=>({group,value})).sort((a,b)=>b.value-a.value);\n  math.dimension=metric; math.valueBasis='mentions'; math.breakdown=arr.slice(0,intent.limit||15);\n  math.total=filtered.length; math.primary=arr[0]?{label:arr[0].group,value:arr[0].value}:null;\n}\n// ---------- DISTRIBUTION / BREAKDOWN across a dimension ----------\nelse if (op==='breakdown' || intent.type==='distribution'){\n  const dim=groupBy||'subcounty'; const useNumeric=NUMERIC.includes(metric);\n  const g={}; for(const r of filtered){ for(const k of keysFor(r,dim)){ g[k]=g[k]||{v:0,n:0}; g[k].v+= useNumeric?(r[metric]||0):1; g[k].n++; } }\n  let arr=Object.entries(g).map(([group,o])=>({group, value:o.v, records:o.n})).filter(x=>x.group&&x.group!=='(none)');\n  arr.sort((a,b)=> intent.order==='asc'? a.value-b.value : b.value-a.value);\n  math.dimension=dim; math.valueBasis=useNumeric?metric:'record count';\n  math.breakdown=arr.slice(0,intent.limit||15); math.total=arr.reduce((s,x)=>s+x.value,0);\n  math.primary=arr[0]?{label:arr[0].group,value:arr[0].value}:null;\n}\n// ---------- RATE (boolean %) ----------\nelse if (op==='rate'){\n  const bm=BOOLEAN.includes(metric)?metric:'collection_complete';\n  // denominator = records where the flag is applicable (e.g. completion only counts waste-collection records)\n  let applicable=filtered;\n  if(bm==='collection_complete') applicable=filtered.filter(r=>String(r.collection_status||'').trim()!=='');\n  const trueN=applicable.filter(r=>r[bm]).length;\n  math.metric=bm; math.applicableRecords=applicable.length; math.trueCount=trueN;\n  math.rate=applicable.length?trueN/applicable.length:0; math.ratePct=applicable.length?Math.round(math.rate*1000)/10:null;\n  const g={}; for(const r of applicable){ for(const k of keysFor(r,groupBy)){ g[k]=g[k]||{t:0,n:0}; g[k].t+=r[bm]?1:0; g[k].n++; } }\n  let arr=Object.entries(g).map(([group,o])=>({group, ratePct:o.n?Math.round(o.t/o.n*1000)/10:0, n:o.n})).filter(x=>x.group&&x.group!=='(none)');\n  arr.sort((a,b)=>b.ratePct-a.ratePct); math.byGroup=arr.slice(0,15);\n  math.primary={label:bm+' rate', value:(math.ratePct!=null?math.ratePct+'%':'n/a')};\n}\n// ---------- RATIO (metric / secondaryMetric) ----------\nelse if (op==='ratio' || intent.type==='ratio'){\n  const a=metric, b=intent.secondaryMetric||'bins_total';\n  const sA=filtered.reduce((s,r)=>s+(r[a]||0),0), sB=filtered.reduce((s,r)=>s+(r[b]||0),0);\n  math.numeratorMetric=a; math.denominatorMetric=b; math.numerator=sA; math.denominator=sB;\n  math.ratio=sB?sA/sB:null; math.ratioPct=sB?Math.round(sA/sB*1000)/10:null;\n  math.primary={label:a+' / '+b, value:(math.ratioPct!=null?math.ratioPct+'%':'n/a')};\n}\n// ---------- TREND (by day / week / month) ----------\nelse if (op==='trend' || intent.type==='trend'){\n  const gran = intent.granularity || 'month';\n  const bucketOf = r => gran==='day' ? r.date : gran==='week' ? r.week : r.month;\n  const g={}; for(const r of filtered){ const k=bucketOf(r); if(!k)continue; g[k]=(g[k]||0)+metricValue(r); }\n  const t=Object.entries(g).sort().map(([bucket,total])=>({bucket,total})); math.trend=t; math.granularity=gran;\n  if(t.length){ math.primary={label:t[t.length-1].bucket, value:t[t.length-1].total};\n    if(t.length>=2){ const f=t[0].total,l=t[t.length-1].total; math.change=l-f; math.changePct=f?Math.round((l-f)/f*1000)/10:null; math.firstBucket=t[0].bucket; math.lastBucket=t[t.length-1].bucket; } }\n  else math.primary=null;\n}\n// ---------- DIFFERENCE (compare named groups) ----------\nelse if (op==='difference' || intent.type==='comparison'){\n  const dim=groupBy||'subcounty'; const g={};\n  for(const r of filtered){ for(const k of keysFor(r,dim)){ g[k]=g[k]||{v:0,n:0}; g[k].v+=metricValue(r); g[k].n++; } }\n  let arr=Object.entries(g).map(([group,o])=>({group,total:o.v,records:o.n})).filter(x=>x.group&&x.group!=='(none)').sort((a,b)=>b.total-a.total);\n  const targets=(intent.filters||[]).filter(f=>f.field===dim).map(f=>String(f.value||'').toLowerCase());\n  const comp = targets.length ? arr.filter(x=>targets.some(t=>x.group.toLowerCase().includes(t))) : arr.slice(0,2);\n  math.comparison=comp; math.ranking=arr.slice(0,10);\n  math.difference = comp.length>=2 ? Math.abs(comp[0].total-comp[1].total) : null;\n  math.primary = comp.length>=2 ? {label:'gap '+comp[0].group+' vs '+comp[1].group, value:math.difference} : (arr[0]?{label:arr[0].group,value:arr[0].total}:null);\n}\n// ---------- AGGREGATION: rank / sum / avg / count / min / max ----------\nelse {\n  const g={};\n  for(const r of filtered){ for(const k of keysFor(r,groupBy)){ if(!g[k])g[k]={sum:0,n:0,vals:[]}; const v=metricValue(r); g[k].sum+=v; g[k].n++; if(metric==='reports'||r[metric]!=null)g[k].vals.push(v);} }\n  let arr=Object.entries(g).map(([group,o])=>({group, total:o.sum, average:o.vals.length?Math.round(o.sum/o.vals.length*100)/100:0, records:o.n, min:o.vals.length?Math.min.apply(null,o.vals):null, max:o.vals.length?Math.max.apply(null,o.vals):null}));\n  arr=arr.filter(x=>x.group&&x.group!=='(none)');\n  const key = op==='avg'?'average':op==='min'?'min':op==='max'?'max':op==='count'?'records':'total';\n  arr.sort((a,b)=> intent.order==='asc'?(a[key]-b[key]):(b[key]-a[key]));\n  math.ranking=arr.slice(0,intent.limit||10);\n  math.grandTotal=arr.reduce((s,x)=>s+x.total,0);\n  math.top=arr[0]||null;\n  math.primary = math.top ? {label: math.top.group + (op==='avg'?' (avg)':op==='count'?' (records)':''), value: math.top[key]} : null;\n}\n\nreturn [{ json: Object.assign({}, d, { math, filteredSample: filtered.slice(0,3) }) }];"
+      },
+      "id": "d547dad7-c3c2-475c-a734-239049dde310",
+      "name": "7. Math Engine (Firewall)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json; const m = d.math; const rows = d.rows || [];\nconst NUMERIC=['waste_loads','loads_remaining','staff_deployed','attendees','trees_planted','seedlings','bins_total','bins_emptied','trucks_allocated','arrests_total'];\nconst insights=[];\ntry{\n  const metric=m.metric;\n  const topGroup=(m.top&&m.top.group)||(m.breakdown&&m.breakdown[0]&&m.breakdown[0].group)||null;\n  if(NUMERIC.includes(metric) && topGroup && (m.groupBy==='subcounty')){\n    const sc=topGroup.toLowerCase(); const byMonth={};\n    for(const r of rows){ if(!r.subcounty||r.subcounty.toLowerCase()!==sc||!r.date)continue; const mo=r.date.slice(0,7); byMonth[mo]=(byMonth[mo]||0)+(r[metric]||0); }\n    const vals=Object.values(byMonth);\n    if(vals.length>=2){ const avg=vals.reduce((a,b)=>a+b,0)/vals.length; const cur=(m.top&&m.top.total)||0;\n      if(avg>0){ const dev=(cur-avg)/avg; if(Math.abs(dev)>=d.config.anomalyThreshold){\n        insights.push(topGroup+' is '+Math.round(dev*100)+'% '+(dev>0?'above':'below')+' its typical monthly '+metric.replace(/_/g,' ')+' (~'+Math.round(avg)+').'); } } }\n  }\n  if(m.operation==='rate' && m.ratePct!=null && m.ratePct<70 && m.metric==='collection_complete'){\n    insights.push('Only '+m.ratePct+'% of collections were marked complete — the rest are incomplete and may need follow-up.');\n  }\n}catch(e){}\nreturn [{ json: Object.assign({}, d, { insights }) }];"
+      },
+      "id": "e1bd5776-8517-422e-84e4-72dc6ea7726e",
+      "name": "8. Insight Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst ctx = { \n    question: d.question, \n    intent: d.intent, \n    data_source_used: d.usedSource, \n    row_counts: d.counts,\n    pre_computed_facts: d.math, \n    insight_flags: d.insights, \n    recent_conversation: (d.history || []).slice(-4),\n    // ===== ADD CHART INFO =====\n    chart_url: d.chartUrl || null,\n    has_chart: d.hasChart || false\n};\n\nconst system = [\n    \"You are the voice of the Green & Clean Nairobi assistant — a sharp, friendly colleague in the Governor's Delivery Unit who knows the field data cold and explains it like a person, not a dashboard.\",\n    \"Answer the way you'd talk to a workmate who leaned over and asked: natural, warm, confident, brief. Use contractions. Vary how you open — don't start every reply the same way.\",\n    \"\",\n    \"NON-NEGOTIABLE: every number you give must be copied exactly from pre_computed_facts. Never do your own arithmetic, never round a figure into a different number, never invent one.\",\n    \"Translate internal field names into everyday words. Never show snake_case, JSON, brackets, or column names.\",\n    \"\",\n    \"Keep it to 2-4 sentences that read like speech — no bullet points, headers, or 'Note:' labels in a normal chat reply.\",\n    \"If there's an insight flag, slip it in casually as a heads-up.\",\n    \"\",\n    // ===== CHART INSTRUCTION =====\n    \"If has_chart is true, end your response with: 'Here's a visualization:' and the chart will be added automatically. Don't try to describe the chart visually — just mention it briefly.\"\n].join('\\n');\n\nconst synthBody = { \n    model: d.config.synthModel, \n    max_tokens: d.config.maxTokensSynth, \n    temperature: 0.65, \n    system,\n    messages: [{ \n        role: 'user', \n        content: 'CONTEXT (ground truth):\\n' + JSON.stringify(ctx, null, 2) + '\\n\\nWrite the final answer now.' \n    }] \n};\n\nreturn [{ json: Object.assign({}, d, { synthBody }) }];"
+      },
+      "id": "2c822fd0-3ce3-4d44-ba56-98ed1e336ee1",
+      "name": "9. Build Synthesis Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.synthBody }}",
+        "options": {}
+      },
+      "id": "1e01fa84-424b-4680-8772-33a00709868a",
+      "name": "10. Claude: Synthesize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1968,
+        240
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "pSPWEsSAti5YnJHk",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst d = $('9. Build Synthesis Request').first().json;\nlet text = ''; \ntry { \n    text = (resp.content || []).map(b => b.text || '').join('').trim(); \n} catch(e) {}\n\n// ===== GET CHART URL =====\nconst chartUrl = d.chartUrl || null;\n\n// ===== BUILD THE RESPONSE: EXPLANATION + CHART =====\nlet finalResponse = '';\n\n// 1. ADD THE EXPLANATION FIRST\nif (text) {\n    finalResponse = text;\n} else {\n    finalResponse = 'Sorry, I could not generate an answer just now. Please try rephrasing your question.';\n}\n\n// 2. ADD THE CHART BELOW THE EXPLANATION\nif (chartUrl) {\n    // Add a line break and the chart\n    finalResponse += '\\n\\n';\n    finalResponse += `![Green & Clean Chart](${chartUrl})`;\n}\n\n// ===== VALIDATE NUMBERS (optional - adds missing numbers) =====\ntry {\n    const p = d.math && d.math.primary;\n    if (p && p.value != null && !text.includes(String(p.value))) {\n        const valStr = String(p.value);\n        const digits = valStr.replace(/[^0-9.]/g, '');\n        if (!finalResponse.includes(digits)) {\n            const plainLabel = String(p.label).replace(/_/g, ' ');\n            const pretty = valStr.includes('%') ? valStr : Number(digits).toLocaleString();\n            finalResponse += ' (For the exact number: ' + plainLabel + ' — ' + pretty + '.)';\n        }\n    }\n} catch(e) {}\n\n// ===== SAVE TO MEMORY =====\nconst sd = $getWorkflowStaticData('global'); \nsd.memory = sd.memory || {};\nconst hist = sd.memory[d.sessionId] || []; \nhist.push({ user: d.question, assistant: finalResponse });\nsd.memory[d.sessionId] = hist.slice(-(d.config.memoryTurns || 8));\n\n// ===== RETURN BOTH =====\nreturn [{ \n    json: { \n        output: finalResponse,  // Contains BOTH explanation AND chart\n        source_used: d.usedSource, \n        verified_facts: d.math, \n        insights: d.insights,\n        chartUrl: chartUrl,\n        hasChart: chartUrl !== null\n    } \n}];"
+      },
+      "id": "ed7ee2f8-9869-48d9-842b-6cbb3e101fb8",
+      "name": "11. Validate & Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Green & Clean Nairobi — Executive RAG Chatbot (Anthropic + n8n)\n\n**Setup (3 credentials + 1 ID):**\n1. **Anthropic** — *Header Auth* credential named `Anthropic API`; header **Name** `x-api-key`, **Value** your `sk-ant-...` key. Attach to nodes 3 & 10.\n2. **Postgres** — attach to `5a`; edit the table name if not `green_clean_reports`.\n3. **Google Sheets** — attach OAuth2 to `5b`; set the **documentId** to your Sheet ID.\n\nOpen the **Chat** tab and ask anything in the catalog below.",
+        "height": 300,
+        "width": 470,
+        "color": 4
+      },
+      "id": "f61e892f-056a-45e6-a83f-8d24f97975c9",
+      "name": "Sticky Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Models (edit in `1. Init & Load Memory`)\nInterpretation: `claude-haiku-4-5` · Synthesis: `claude-sonnet-4-6`.\nIf you switch synthesis to `claude-sonnet-5`, remove the `temperature` line in `9. Build Synthesis Request`.",
+        "height": 170,
+        "width": 420,
+        "color": 6
+      },
+      "id": "3ccafb20-dcdf-4c9b-b093-00b36d2354d8",
+      "name": "Sticky Models",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### What it can now answer (any column)\n**Metrics:** waste loads, loads remaining, staff, attendees, trees, seedlings, bins (total/emptied), trucks, arrests, report counts.\n**Rates:** collection completion, data-quality confirmation, photo-evidence completeness, night surveillance, arrests.\n**Ratios:** bins emptied ÷ total, loads remaining ÷ collected.\n**Breakdowns:** by subcounty, ward, month, activity, incident type, vehicle, who collects (NCCG/contractor/CBO), tree type, sensitization type, flood severity/cause, drainage status, obstruction type/ownership, partners, most-lacking resources.\n**Ops:** rank, sum, avg, min/max, trend, compare, distribution.\n**Time:** understands 'last month', 'this week', 'past 30 days', 'March 2026', '3rd March', or a date range — resolved against today, then filtered.\n\n_Try:_ \"Which subcounty collected the most waste?\" · \"Breakdown of incidents by type\" · \"What share of collections were completed?\" · \"Who collects more, NCCG or contractors?\" · \"Which resources are most lacking?\" · \"Trees planted trend\" · \"Flooding by severity\".",
+        "height": 282,
+        "width": 716,
+        "color": 7
+      },
+      "id": "e50ac0e9-0491-47f8-bc8c-f0ce3c4d03f6",
+      "name": "Sticky Capabilities",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        400,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Dual-source + automatic fallback\nBoth sources run with *Continue on Error*. `6. Resolve` uses whichever returned data; if both do, it follows `config.sourcePreference`.\n\n⚠️ If Postgres and the Sheet hold the **same** records, set `sourcePreference` to `postgres` or `googlesheets` (not `merge`) to avoid double counting.",
+        "height": 80,
+        "width": 360,
+        "color": 5
+      },
+      "id": "7e9a9cf7-c474-47e6-bc6a-80febe9bb4d9",
+      "name": "Sticky Fallback",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Math firewall + validator\n`7. Math Engine` does ALL arithmetic in JS across the full metric registry and tags it `pre_computed`. The LLM only writes prose from those ground-truth numbers. `11. Validate` re-checks the headline figure (`math.primary`) and corrects drift.",
+        "height": 184,
+        "width": 548,
+        "color": 3
+      },
+      "id": "aad223d0-4f48-4750-86cf-5f9e473b7672",
+      "name": "Sticky Firewall",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1yOluTEsEC9eFr1IBaTC1i7TRiCiPYPkwVQ8ZauTRA5k",
+          "mode": "list",
+          "cachedResultName": "Green and Clean Nairobi (Responses)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yOluTEsEC9eFr1IBaTC1i7TRiCiPYPkwVQ8ZauTRA5k/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 790795476,
+          "mode": "list",
+          "cachedResultName": "n8n Greening Initiative",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yOluTEsEC9eFr1IBaTC1i7TRiCiPYPkwVQ8ZauTRA5k/edit#gid=790795476"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        624,
+        144
+      ],
+      "id": "76b7fefe-07a2-4a49-b1ce-8fbaf9d3d0fa",
+      "name": "5a. Greening Initiatives",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLUzxw5cYjZcZcxP",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1yOluTEsEC9eFr1IBaTC1i7TRiCiPYPkwVQ8ZauTRA5k",
+          "mode": "list",
+          "cachedResultName": "Green and Clean Nairobi (Responses)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yOluTEsEC9eFr1IBaTC1i7TRiCiPYPkwVQ8ZauTRA5k/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1529150820,
+          "mode": "list",
+          "cachedResultName": "Sensitization Programme",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yOluTEsEC9eFr1IBaTC1i7TRiCiPYPkwVQ8ZauTRA5k/edit#gid=1529150820"
+        },
+        "options": {}
+      },
+      "id": "ad24c554-a1db-4aca-93cc-ff01f3952a51",
+      "name": "5c. Sensitization Programs ",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        624,
+        336
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLUzxw5cYjZcZcxP",
+          "name": "Google Sheets account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1_awtkkIkzyRMBIKkirwfucoMJa5VLRvtMnE6t7QCDlY",
+          "mode": "list",
+          "cachedResultName": "n8n Green and Clean Nairobi Worksheet ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_awtkkIkzyRMBIKkirwfucoMJa5VLRvtMnE6t7QCDlY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 269337752,
+          "mode": "list",
+          "cachedResultName": "Environ activities by Ward",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_awtkkIkzyRMBIKkirwfucoMJa5VLRvtMnE6t7QCDlY/edit#gid=269337752"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        656,
+        608
+      ],
+      "id": "bad21652-bb19-490c-8834-9a874a24aefe",
+      "name": " 5b. Env. Maintenance by Ward",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLUzxw5cYjZcZcxP",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1_awtkkIkzyRMBIKkirwfucoMJa5VLRvtMnE6t7QCDlY",
+          "mode": "list",
+          "cachedResultName": "n8n Green and Clean Nairobi Worksheet ",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_awtkkIkzyRMBIKkirwfucoMJa5VLRvtMnE6t7QCDlY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1529150820,
+          "mode": "list",
+          "cachedResultName": "Sensitization Programme",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_awtkkIkzyRMBIKkirwfucoMJa5VLRvtMnE6t7QCDlY/edit#gid=1529150820"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        832
+      ],
+      "id": "8c87215d-171d-4781-ba32-39646683e16d",
+      "name": "5d. Wasteload collection",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PLUzxw5cYjZcZcxP",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst math = d.math;\nconst question = d.question || '';\n\n// ================= CHART CONFIGURATION =================\nlet chartUrl = null;\nlet chartData = null;\n\n// Function to generate QuickChart URL\nfunction generateChartURL(config) {\n    const baseUrl = 'https://quickchart.io/chart';\n    const encoded = encodeURIComponent(JSON.stringify(config));\n    return `${baseUrl}?c=${encoded}`;\n}\n\n// Function to detect what type of chart to generate\nfunction detectChartType(mathData, question) {\n    const q = question.toLowerCase();\n    \n    // Check if we have ranking data (bar chart)\n    if (mathData.ranking && mathData.ranking.length > 0) {\n        return {\n            type: 'bar',\n            title: detectChartTitle(mathData, q),\n            data: mathData.ranking\n        };\n    }\n    \n    // Check if we have breakdown data (bar chart)\n    if (mathData.breakdown && mathData.breakdown.length > 0) {\n        return {\n            type: 'bar',\n            title: detectChartTitle(mathData, q),\n            data: mathData.breakdown\n        };\n    }\n    \n    // Check if we have trend data (line chart)\n    if (mathData.trend && mathData.trend.length > 0) {\n        return {\n            type: 'line',\n            title: detectChartTitle(mathData, q),\n            data: mathData.trend\n        };\n    }\n    \n    // Check if we have comparison data (bar chart)\n    if (mathData.comparison && mathData.comparison.length > 0) {\n        return {\n            type: 'bar',\n            title: detectChartTitle(mathData, q),\n            data: mathData.comparison\n        };\n    }\n    \n    return null;\n}\n\nfunction detectChartTitle(mathData, question) {\n    const q = question.toLowerCase();\n    let title = 'Green & Clean Nairobi Data';\n    \n    // Extract what the chart is showing\n    if (mathData.metric) {\n        const metricLabels = {\n            'waste_loads': 'Waste Loads',\n            'staff_deployed': 'Staff Deployed',\n            'attendees': 'Attendees',\n            'trees_planted': 'Trees Planted',\n            'reports': 'Activity Count',\n            'resources_lacking': 'Most Lacking Resources',\n            'key_messages': 'Key Sensitization Messages',\n            'partners': 'Sensitization Partners',\n            'outputs': 'Sensitization Outputs',\n            'outcomes': 'Sensitization Outcomes',\n            'activity_type': 'Activity Types'\n        };\n        const label = metricLabels[mathData.metric] || mathData.metric.replace(/_/g, ' ');\n        title = `${label} by ${mathData.groupBy || 'Category'}`;\n    }\n    \n    // Add time period if available\n    if (mathData.period && mathData.period.label && mathData.period.label !== 'all dates') {\n        title += ` (${mathData.period.label})`;\n    }\n    \n    return title;\n}\n\n// Function to build Chart.js config\nfunction buildChartConfig(chartInfo) {\n    if (!chartInfo || !chartInfo.data || chartInfo.data.length === 0) {\n        return null;\n    }\n    \n    const data = chartInfo.data;\n    let labels = [];\n    let values = [];\n    let datasetLabel = '';\n    \n    // Extract labels and values based on data structure\n    if (data[0].group !== undefined) {\n        // Ranking or breakdown data\n        labels = data.map(item => item.group);\n        values = data.map(item => item.value || item.total || 0);\n        datasetLabel = chartInfo.title || 'Value';\n    } else if (data[0].bucket !== undefined) {\n        // Trend data (time series)\n        labels = data.map(item => item.bucket);\n        values = data.map(item => item.total || 0);\n        datasetLabel = chartInfo.title || 'Trend';\n    } else if (data[0].label !== undefined) {\n        // Generic data\n        labels = data.map(item => item.label);\n        values = data.map(item => item.value || 0);\n        datasetLabel = chartInfo.title || 'Value';\n    } else {\n        // Fallback - use keys as labels\n        labels = Object.keys(data);\n        values = Object.values(data);\n        datasetLabel = chartInfo.title || 'Value';\n    }\n    \n    // Determine colors\n    const colors = [\n        '#3498db', '#e74c3c', '#2ecc71', '#f39c12', \n        '#9b59b6', '#1abc9c', '#e67e22', '#34495e',\n        '#27ae60', '#2980b9', '#8e44ad', '#16a085'\n    ];\n    \n    const backgroundColor = values.map((_, i) => colors[i % colors.length]);\n    \n    const config = {\n        type: chartInfo.type || 'bar',\n        data: {\n            labels: labels,\n            datasets: [{\n                label: datasetLabel,\n                data: values,\n                backgroundColor: backgroundColor,\n                borderColor: colors.map(c => c),\n                borderWidth: 1\n            }]\n        },\n        options: {\n            responsive: true,\n            maintainAspectRatio: true,\n            plugins: {\n                title: {\n                    display: true,\n                    text: chartInfo.title || 'Green & Clean Nairobi Analysis',\n                    font: {\n                        size: 16,\n                        weight: 'bold'\n                    }\n                },\n                legend: {\n                    display: true,\n                    position: 'top'\n                }\n            },\n            scales: {\n                y: {\n                    beginAtZero: true,\n                    ticks: {\n                        callback: function(value) {\n                            if (value >= 1000) {\n                                return value.toLocaleString();\n                            }\n                            return value;\n                        }\n                    }\n                }\n            }\n        }\n    };\n    \n    // Customize for line charts\n    if (chartInfo.type === 'line') {\n        config.options.elements = {\n            line: {\n                tension: 0.3 // Smooth lines\n            }\n        };\n        config.data.datasets[0].backgroundColor = 'rgba(52, 152, 219, 0.1)';\n        config.data.datasets[0].borderColor = '#3498db';\n        config.data.datasets[0].pointBackgroundColor = '#3498db';\n        config.data.datasets[0].fill = true;\n        config.data.datasets[0].pointRadius = 4;\n    }\n    \n    // Customize for pie/doughnut charts\n    if (chartInfo.type === 'pie' || chartInfo.type === 'doughnut') {\n        delete config.options.scales;\n        config.options.plugins.legend.position = 'right';\n    }\n    \n    return config;\n}\n\n// ================= GENERATE THE CHART =================\nlet chartInfo = detectChartType(math, question);\n\nif (chartInfo && chartInfo.data && chartInfo.data.length > 0) {\n    // Limit to top 10 items for readability\n    if (chartInfo.data.length > 10) {\n        chartInfo.data = chartInfo.data.slice(0, 10);\n    }\n    \n    const chartConfig = buildChartConfig(chartInfo);\n    \n    if (chartConfig) {\n        // Generate the chart URL\n        chartUrl = generateChartURL(chartConfig);\n        chartData = {\n            config: chartConfig,\n            url: chartUrl,\n            title: chartInfo.title,\n            type: chartInfo.type,\n            dataPoints: chartInfo.data.length\n        };\n        console.log('✅ Chart generated successfully');\n        console.log('📊 Chart URL:', chartUrl);\n    } else {\n        console.log('⚠️ Could not build chart config');\n    }\n} else {\n    console.log('ℹ️ No chartable data found in math object');\n}\n\n// ================= RETURN WITH CHART DATA =================\nreturn [{\n    json: {\n        sessionId: d.sessionId,\n        question: d.question,\n        config: d.config,\n        history: d.history,\n        nowISO: d.nowISO,\n        intent: d.intent,\n        rows: d.rows,\n        usedSource: d.usedSource,\n        counts: d.counts,\n        detectedSheet: d.detectedSheet,\n        math: d.math,\n        filteredSample: d.filteredSample || [],\n        insights: d.insights || [],\n        // ===== CHART DATA =====\n        chartUrl: chartUrl,\n        chartData: chartData,\n        hasChart: chartUrl !== null\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        240
+      ],
+      "id": "22005786-81b6-43ee-9fed-b3b66c364453",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "public": true,
+        "options": {
+          "allowFileUploads": true,
+          "allowedFilesMimeTypes": "audio/*,.mp3,.wav,.webm,.m4a,.ogg"
+        }
+      },
+      "id": "13e7db2c-27ec-4518-a124-9845d36c08f2",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -464,
+        240
+      ],
+      "webhookId": "72dfdefb-3726-4e85-872a-8ffb224b0e22"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "1. Init & Load Memory": {
+      "main": [
+        [
+          {
+            "node": "2. Build Interpretation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Build Interpretation Request": {
+      "main": [
+        [
+          {
+            "node": "3. Claude: Interpret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Claude: Interpret": {
+      "main": [
+        [
+          {
+            "node": "4. Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "5a. Greening Initiatives",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "5c. Sensitization Programs ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Resolve Data Sources": {
+      "main": [
+        [
+          {
+            "node": "7. Math Engine (Firewall)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Math Engine (Firewall)": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Insight Engine": {
+      "main": [
+        [
+          {
+            "node": "9. Build Synthesis Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Build Synthesis Request": {
+      "main": [
+        [
+          {
+            "node": "10. Claude: Synthesize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Claude: Synthesize": {
+      "main": [
+        [
+          {
+            "node": "11. Validate & Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5a. Greening Initiatives": {
+      "main": [
+        [
+          {
+            "node": "6. Resolve Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5c. Sensitization Programs ": {
+      "main": [
+        [
+          {
+            "node": "6. Resolve Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "8. Insight Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Init & Load Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "fdcc3d1f-80ff-463c-b2cc-84da27e36920",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dde8420051463c00a4ff55de01e69d11299ca2859e4d977c4146c5bf0521bbd5"
+  },
+  "nodeGroups": [],
+  "id": "Uwr0hqRGYFSIquaU",
+  "tags": []
+}
