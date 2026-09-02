@@ -11,6 +11,7 @@ export class App {
   protected error = signal('');
   protected result = signal<QueryResult | null>(null);
   protected recent = signal<string[]>([]);
+  protected shareStatus = signal('');
   protected readonly hasResponse = computed(() => !!this.result());
   protected readonly scorecards = computed<MetricCard[]>(() => this.toCards(this.result()?.verified_facts));
 
@@ -23,6 +24,28 @@ export class App {
     });
   }
   protected runRecent(query: string): void { this.question = query; this.ask(query); }
+  protected async sharePage(): Promise<void> {
+    this.shareStatus.set('');
+    const shareData = {
+      title: 'Nairobi City County Green & Clean AI Data Assistant',
+      text: 'Explore verified insights from Nairobi City County Green & Clean field reports.',
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareData.url);
+      this.shareStatus.set('Link copied to your clipboard.');
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') {
+        this.shareStatus.set('Unable to share the link. Please copy it from your browser address bar.');
+      }
+    }
+  }
   protected onEnter(event: Event): void { if (!(event instanceof KeyboardEvent) || !event.shiftKey) { event.preventDefault(); this.ask(); } }
   private normalise(value: DashboardResponse): QueryResult {
     const raw = value as Record<string, unknown>;
