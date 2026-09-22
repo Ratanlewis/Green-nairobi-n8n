@@ -1,126 +1,127 @@
-import { AfterViewChecked, Component, ElementRef, OnDestroy, QueryList, ViewChildren, computed, inject, signal } from '@angular/core';
-import { Chart, ChartConfiguration, registerables } from 'chart.js';
+import { AfterViewChecked, Component, ElementRef, OnDestroy, QueryList, ViewChildren, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { N8nService } from './core/services/n8n.service';
-import { DashboardResponse, MetricCard, QueryResult, ResponsePart } from './core/models/dashboard.models';
+import { ConversationStorageService } from './core/services/conversation-storage.service';
+import { UserIdentityService } from './core/services/user-identity.service';
+import { ChatMessage, Conversation, N8nResponse } from './core/models/dashboard.models';
 
 Chart.register(...registerables);
-
 @Component({ selector: 'app-root', imports: [FormsModule], templateUrl: './app.html', styleUrl: './app.css' })
 export class App implements AfterViewChecked, OnDestroy {
   private readonly n8n = inject(N8nService);
+  private readonly userIdentity = inject(UserIdentityService);
+  private readonly conversationStorage = inject(ConversationStorageService);
   @ViewChildren('chartCanvas') private readonly chartCanvases!: QueryList<ElementRef<HTMLCanvasElement>>;
-  private chartInstances: Chart[] = [];
-  private renderedChartSignature = '';
-  private chartVersion = 0;
+  @ViewChildren('messageInput') private readonly inputs!: QueryList<ElementRef<HTMLTextAreaElement>>;
+  private charts: Chart[] = [];
+  private renderedChartKey = '';
+  protected readonly userId = this.userIdentity.getUserId();
+  private readonly conversations = signal<Conversation[]>(this.conversationStorage.load(this.userId));
+  private draftConversationId = crypto.randomUUID();
+  protected readonly activeConversation = signal<Conversation | null>(null);
+  protected readonly sidebarOpen = signal(false);
+  protected readonly loading = signal(false);
+  protected readonly error = signal('');
   protected question = '';
-  protected loading = signal(false);
-  protected error = signal('');
-  protected result = signal<QueryResult | null>(null);
-  protected recent = signal<string[]>([]);
-  protected shareStatus = signal('');
-  protected readonly hasResponse = computed(() => !!this.result());
-  protected readonly scorecards = computed<MetricCard[]>(() => this.toCards(this.result()?.verified_facts));
 
-  protected ask(question = this.question): void {
-    const query = question.trim(); if (!query || this.loading()) return;
-    this.question = query; this.loading.set(true); this.error.set('');
-    this.n8n.ask(query).subscribe({
-      next: response => { this.result.set(this.normalise(response)); this.recent.update(items => [query, ...items.filter(item => item !== query)].slice(0, 5)); this.loading.set(false); },
-      error: () => { this.error.set('We could not reach the data assistant. Check the configured n8n webhook URL and try again.'); this.loading.set(false); },
+  protected get recentConversations(): Conversation[] { return [...this.conversations()].sort((a, b) => b.updatedAt - a.updatedAt); }
+
+  protected send(question = this.question): void {
+    const text = question.trim();
+    if (!text || this.loading()) return;
+    let conversation = this.activeConversation();
+    if (!conversation) conversation = this.createConversation(text);
+    const pending: ChatMessage = { ...this.message('assistant', ''), pending: true };
+    conversation = { ...conversation, updatedAt: Date.now(), messages: [...conversation.messages, this.message('user', text), pending] };
+    this.setActive(conversation);
+    this.question = ''; this.error.set(''); this.loading.set(true); this.sidebarOpen.set(false);
+    this.resizeAfterRender();
+    this.n8n.ask(text, conversation.sessionId, this.userId).subscribe({
+      next: response => {
+        const current = this.activeConversation();
+        if (!current || current.id !== conversation!.id) return;
+        this.setActive({ ...current, updatedAt: Date.now(), messages: [...current.messages.slice(0, -1), this.responseToMessage(response)] });
+        this.loading.set(false);
+      },
+      error: () => {
+        const current = this.activeConversation();
+        if (!current || current.id !== conversation!.id) return;
+        this.setActive({ ...current, updatedAt: Date.now(), messages: [...current.messages.slice(0, -1), this.message('assistant', "Sorry, I couldn't process that request. Please try again.")] });
+        this.error.set('Sorry, I couldn’t process that request. Please try again.'); this.loading.set(false);
+      }
     });
   }
-  protected runRecent(query: string): void { this.question = query; this.ask(query); }
-  protected async sharePage(): Promise<void> {
-    this.shareStatus.set('');
-    const shareData = {
-      title: 'Nairobi City County Green & Clean AI Data Assistant',
-      text: 'Explore verified insights from Nairobi City County Green & Clean field reports.',
-      url: window.location.href,
-    };
 
-    try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-        return;
-      }
-
-      await navigator.clipboard.writeText(shareData.url);
-      this.shareStatus.set('Link copied to your clipboard.');
-    } catch (error) {
-      if ((error as DOMException).name !== 'AbortError') {
-        this.shareStatus.set('Unable to share the link. Please copy it from your browser address bar.');
-      }
+  protected newChat(): void { this.draftConversationId = crypto.randomUUID(); this.activeConversation.set(null); this.question = ''; this.error.set(''); this.sidebarOpen.set(false); setTimeout(() => { this.resizeInput(this.inputs.first?.nativeElement); this.inputs.first?.nativeElement.focus(); }); }
+  protected openConversation(conversation: Conversation): void { this.draftConversationId = crypto.randomUUID(); this.activeConversation.set(conversation); this.error.set(''); this.sidebarOpen.set(false); }
+  protected deleteConversation(conversation: Conversation, event: MouseEvent): void {
+    event.stopPropagation();
+    this.conversations.update(items => items.filter(item => item.id !== conversation.id));
+    this.conversationStorage.save(this.userId, this.conversations());
+    if (this.activeConversation()?.id === conversation.id) {
+      this.loading.set(false);
+      this.newChat();
     }
   }
-  protected onEnter(event: Event): void { if (!(event instanceof KeyboardEvent) || !event.shiftKey) { event.preventDefault(); this.ask(); } }
+  protected retry(): void { const question = [...(this.activeConversation()?.messages ?? [])].reverse().find(item => item.role === 'user'); if (question) this.send(question.content); }
+  protected onKeydown(event: KeyboardEvent): void { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.send(); } }
+  protected resizeInput(textarea?: HTMLTextAreaElement): void {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const maxHeight = Number.parseFloat(getComputedStyle(textarea).maxHeight) || 150;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+  }
+
+  protected markdown(content: string): string {
+    const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let html = escape(content);
+    html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h2>$1</h2>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = this.tables(html);
+    html = html.replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>').replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    return html.split(/\n{2,}/).map(part => /<(h[23]|ul|ol)/.test(part) ? part : `<p>${part.replace(/\n/g, '<br>')}</p>`).join('');
+  }
+  private tables(html: string): string {
+    return html.replace(/(^\|.*\|\n\|(?:\s*:?-+:?\s*\|)+\n)(\|.*\|(?:\n\|.*\|)*)/gm, (match) => {
+      const rows = match.trim().split('\n').filter(row => !/^\|(?:\s*:?-+:?\s*\|)+$/.test(row));
+      const cells = (row: string) => row.split('|').slice(1, -1).map(cell => cell.trim());
+      const [head, ...body] = rows.map(cells);
+      return `<table><thead><tr>${head.map(cell => `<th>${cell}</th>`).join('')}</tr></thead><tbody>${body.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    });
+  }
   ngAfterViewChecked(): void { this.renderCharts(); }
   ngOnDestroy(): void { this.destroyCharts(); }
-  private normalise(value: unknown): QueryResult {
-    const raw = this.responseBody(value);
-    const response = raw as DashboardResponse;
-    const answer = response.output || response.answer || (typeof raw['message'] === 'string' ? raw['message'] : 'The workflow returned no readable answer.');
-    const parts = this.extractChartParts(answer);
-    const hasChartBlock = parts.some(part => part.type === 'chart');
-    const chartUrl = !hasChartBlock && response.hasChart === true && typeof response.chartUrl === 'string' && response.chartUrl ? response.chartUrl : null;
-    return { answer: parts.filter((part): part is Extract<ResponsePart, { type: 'text' }> => part.type === 'text').map(part => part.content).join('\n\n'), parts, chartVersion: ++this.chartVersion, chartUrl, source: response.source_used || 'Nairobi Green & Clean data', verified_facts: response.verified_facts ?? raw['facts'] ?? null, insights: Array.isArray(response.insights) ? response.insights : [] };
+
+  private createConversation(firstQuestion: string): Conversation {
+    const now = Date.now();
+    const id = this.draftConversationId;
+    this.draftConversationId = crypto.randomUUID();
+    return { id, sessionId: id, userId: this.userId, title: this.createTitle(firstQuestion), createdAt: now, updatedAt: now, messages: [] };
   }
-  private responseBody(value: unknown): Record<string, unknown> {
-    const candidate = Array.isArray(value) ? value[0] : value;
-    if (!candidate || typeof candidate !== 'object') return {};
-    const body = candidate as Record<string, unknown>;
-    if ('output' in body || 'answer' in body || 'message' in body) return body;
-    const nested = body['data'] ?? body['body'] ?? body['json'];
-    return nested === candidate ? body : this.responseBody(nested);
+  private createTitle(question: string): string { const maxLength = 45; return question.length > maxLength ? `${question.slice(0, maxLength)}...` : question; }
+  private setActive(conversation: Conversation): void {
+    this.activeConversation.set(conversation);
+    const userConversations = [conversation, ...this.conversations().filter(item => item.id !== conversation.id && item.userId === this.userId)];
+    this.conversations.set(userConversations.slice(0, 20));
+    this.conversationStorage.save(this.userId, this.conversations());
   }
-  private extractChartParts(answer: string): ResponsePart[] {
-    const parts: ResponsePart[] = [];
-    const pattern = /```chartjs\s*([\s\S]*?)```/gi;
-    let cursor = 0;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(answer))) {
-      const config = this.parseChartConfig(match[1]);
-      if (!config) continue;
-      this.addTextPart(parts, answer.slice(cursor, match.index));
-      parts.push({ type: 'chart', config });
-      cursor = match.index + match[0].length;
-    }
-    this.addTextPart(parts, answer.slice(cursor));
-    return parts.length ? parts : [{ type: 'text', content: this.removeChartMarkdown(answer) }];
+  private responseToMessage(value: unknown): ChatMessage { const raw = this.body(value) as N8nResponse; const output = raw.output || raw.answer || raw.message || 'I received the request, but no readable answer was returned.'; return { ...this.message('assistant', this.removeChartConfig(output)), chartUrl: raw.hasChart && raw.chartUrl ? raw.chartUrl : null, chartConfig: this.chartConfig(output) }; }
+  private body(value: unknown): Record<string, unknown> { const candidate = Array.isArray(value) ? value[0] : value; if (!candidate || typeof candidate !== 'object') return {}; const record = candidate as Record<string, unknown>; return record['output'] || record['answer'] || record['message'] ? record : this.body(record['data'] ?? record['body'] ?? record['json']); }
+  private chartConfig(output: string): ChartConfiguration | null { const match = /```chartjs\s*([\s\S]*?)```/i.exec(output); if (!match) return null; try { const config = JSON.parse(match[1]) as ChartConfiguration; return config.type && config.data ? config : null; } catch { return null; } }
+  private removeChartConfig(output: string): string {
+    return output
+      .replace(/```chartjs\s*[\s\S]*?```/gi, '')
+      .replace(/\[[^\]]*\]\(https?:\/\/(?:www\.)?quickchart\.io\/chart\)(?:\?[^\s]*)?/gi, '')
+      .replace(/!?\[[^\]]*\]\(https?:\/\/(?:www\.)?quickchart\.io\/chart[^)]*\)/gi, '')
+      .replace(/https?:\/\/(?:www\.)?quickchart\.io\/chart[^\s<]*/gi, '')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
-  private addTextPart(parts: ResponsePart[], text: string): void { const content = this.removeChartMarkdown(text); if (content) parts.push({ type: 'text', content }); }
-  private parseChartConfig(json: string): ChartConfiguration | null {
-    try {
-      const config = JSON.parse(json) as ChartConfiguration;
-      return ['bar', 'line', 'pie', 'doughnut'].includes(config.type) && Array.isArray(config.data?.labels) && Array.isArray(config.data?.datasets) ? config : null;
-    } catch { return null; }
-  }
-  private removeChartMarkdown(answer: string): string {
-  return answer
-    // Remove Markdown image links
-    .replace(/!?\[[^\]]*\]\([^)]*\)/g, '')
-    // Remove QuickChart URLs
-    .replace(/https?:\/\/quickchart\.io\/chart[^\s]*/gi, '')
-    // Remove URL-encoded Chart.js payload that leaks into the message
-    .replace(/%22%2C%22data%22%3A[\s\S]*?(?=\n|$)/gi, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-  private renderCharts(): void {
-    const configs = this.result()?.parts.filter((part): part is Extract<ResponsePart, { type: 'chart' }> => part.type === 'chart').map(part => part.config) ?? [];
-    const signature = String(this.result()?.chartVersion ?? 0);
-    if (signature === this.renderedChartSignature || this.chartCanvases.length !== configs.length) return;
-    this.destroyCharts();
-    this.renderedChartSignature = signature;
-    this.chartInstances = this.chartCanvases.toArray().map((canvas, index) => new Chart(canvas.nativeElement, configs[index]));
-  }
-  private destroyCharts(): void { this.chartInstances.forEach(chart => chart.destroy()); this.chartInstances = []; this.renderedChartSignature = ''; }
-  private toCards(facts: unknown): MetricCard[] {
-    if (!facts || typeof facts !== 'object') return [];
-    const source = facts as Record<string, unknown>; const candidates = Array.isArray(source['cards']) ? source['cards'] : this.findMetrics(source);
-    return candidates.slice(0, 4).map((item: unknown, index: number) => { const row = item as Record<string, unknown>; const value = row['value'] ?? row['total'] ?? row['result'] ?? item; const label = String(row['label'] ?? row['metric'] ?? row['name'] ?? `Verified indicator ${index + 1}`); return { label: this.pretty(label), value: this.format(value), icon: ['⌁', '♧', '◈', '◌'][index] }; }).filter(card => card.value !== '—');
-  }
-  private findMetrics(source: Record<string, unknown>): unknown[] { const primary = source['primary']; if (primary && typeof primary === 'object') return [primary]; return Object.entries(source).filter(([, value]) => typeof value === 'number' || typeof value === 'string').map(([label, value]) => ({ label, value })); }
-  private pretty(value: string): string { return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase()); }
-  private format(value: unknown): string { if (typeof value === 'number') return new Intl.NumberFormat('en-KE', { maximumFractionDigits: 2 }).format(value); return value == null || value === '' ? '—' : String(value); }
+  private resizeAfterRender(): void { setTimeout(() => this.resizeInput(this.inputs.first?.nativeElement)); }
+  private renderCharts(): void { const messages = this.activeConversation()?.messages.filter(message => message.chartConfig) ?? []; const key = messages.map(message => message.id).join(','); if (key === this.renderedChartKey || this.chartCanvases.length !== messages.length) return; this.destroyCharts(); this.renderedChartKey = key; this.charts = this.chartCanvases.toArray().map((canvas, index) => new Chart(canvas.nativeElement, messages[index].chartConfig!)); }
+  private destroyCharts(): void { this.charts.forEach(chart => chart.destroy()); this.charts = []; this.renderedChartKey = ''; }
+  private message(role: ChatMessage['role'], content: string): ChatMessage { return { id: crypto.randomUUID(), role, content, createdAt: Date.now() }; }
 }

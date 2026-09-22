@@ -1,130 +1,68 @@
-<main class="shell">
-  <header class="topbar">
-    <div class="brand-mark" aria-hidden="true"><img src="images/nairobi-city-logo.png" alt=""></div>
-    <div class="brand-copy">
-      <p>Nairobi City County Green &amp; Clean</p>
-      <h1>AI Data Assistant</h1>
-    </div>
-    <div class="header-note"><span class="live-dot"></span> Green &amp; Clean programme data</div>
-    <button class="share-button" type="button" (click)="sharePage()" aria-label="Share this page" title="Share this page">
-      <span aria-hidden="true">↗</span>
-      <span>Share</span>
-    </button>
-  </header>
-  <section class="hero">
+<div class="app-shell">
+  <aside class="sidebar" [class.open]="sidebarOpen()">
     <div>
-      <p class="eyebrow">INTELLIGENCE HUB</p>
-      <h2>Ask Green and Clean AI Assistant a question.</h2>
-      <p>Clear, verified insights from Green &amp; Clean field reports.</p>
+      <div class="brand"><img src="/images/nairobi-city-logo.png" alt="Nairobi City County Government Logo"
+          class="brand-icon"><span>NaiSafi</span></div><span class="county-title">Nairobi City County Government</span>
+      <button class="new-chat" type="button" (click)="newChat()">+ New chat</button>
+      <p class="sidebar-label">Recent chats</p>
+      <nav class="recent-list" aria-label="Recent conversations">
+        @for (conversation of recentConversations; track conversation.id) { <div class="recent-chat"
+          [class.selected]="activeConversation()?.id === conversation.id"><button type="button" class="recent-chat-title"
+          (click)="openConversation(conversation)" [title]="conversation.title">{{ conversation.title }}</button><button
+          type="button" class="delete-chat" (click)="deleteConversation(conversation, $event)"
+          [attr.aria-label]="'Delete ' + conversation.title" title="Delete chat">&#215;</button></div> }
+        @empty { <p class="empty-recent">Your recent questions will appear here.</p> }
+      </nav>
     </div>
-    <div class="hero-leaf" aria-hidden="true">⌁</div>
-  </section>
-  @if (scorecards().length) { <section class="cards" aria-label="Verified indicators">@for (card of scorecards(); track
-    card.label) { <article class="metric-card"><span class="metric-icon">{{ card.icon }}</span>
-      <p>{{ card.label }}</p><strong>{{ card.value }}</strong><small>Verified from current query</small>
-    </article> }</section> }
-  <section class="workspace">
-    <div class="main-column">
-
-  <!-- RESPONSE SECTION -->
-  @if (hasResponse()) {
-    <section class="response-card">
-      <div class="response-heading">
-        <div>
-          <p class="eyebrow">AI RESPONSE</p>
-          <h3>Here’s what the data shows</h3>
-        </div>
-        <span class="verified">● Verified</span>
+    <div class="sidebar-footer">
+      <div><strong>NaiSafi AI</strong><small>Green &amp; Clean Nairobi</small></div>
+    </div>
+  </aside>
+  @if (sidebarOpen()) { <button class="drawer-backdrop" type="button" aria-label="Close menu"
+    (click)="sidebarOpen.set(false)"></button> }
+  <main class="chat-page">
+    <header class="mobile-header"><button type="button" (click)="sidebarOpen.set(true)"
+        aria-label="Open menu">☰</button>
+      <div class="brand"><img src="/images/nairobi-city-logo.png" alt="Nairobi City County Government Logo"
+          class="brand-icon"><span>NaiSafi</span></div><span></span>
+    </header>
+    <section class="conversation" [class.has-conversation]="activeConversation()">
+      @if (!activeConversation()) {
+      <div class="welcome">
+        <h1>Hello, I’m NaiSafi </h1>
+        <h2>Your Green &amp; Clean Nairobi assistant.</h2>
+        <p class="welcome-copy">Ask me about environment maintenance activities (tree planting, cleanup activities, staff deployment, sensitization activities,
+          resources, partners, wards, subcounties and other programme data.)</p>
+        <div class="suggestions">@for (suggestion of ['How many trees were planted this in July 2026?', 'Which subcounty
+          planted the most trees?', 'How many staff were deployed in Mathare?', 'What resources are most needed?'];
+          track suggestion) { <button type="button" (click)="send(suggestion)">{{ suggestion }} <span>→</span></button>
+          }</div>
       </div>
-
-      <p class="question-label">“{{ question }}”</p>
-      @for (part of result()?.parts ?? []; track $index) {
-        @if (part.type === 'text') {
-          <p class="answer">{{ part.content }}</p>
-        } @else {
-          <div class="response-chart chart-canvas"><canvas #chartCanvas role="img" aria-label="Green &amp; Clean Nairobi visualization"></canvas></div>
-        }
-      }
-      @if (result()?.chartUrl; as chartUrl) {
-        <img class="response-chart" [src]="chartUrl" alt="Green &amp; Clean Nairobi visualization">
+      } @else {
+      <div class="message-list">@for (message of activeConversation()?.messages ?? []; track message.id) {
+        @if (message.role === 'user') { <article class="message user-message">
+          <div class="user-question">{{ message.content }}</div>
+        </article> }
+        @else if (message.pending) { <article class="message assistant-message thinking">
+          <p>Thinking <span class="dots"><i></i><i></i><i></i></span></p>
+        </article> }
+        @else { <article class="message assistant-message">
+          <div class="assistant-content">
+            <div class="markdown" [innerHTML]="markdown(message.content)"></div>@if (message.chartUrl) { <img
+              class="chart-image" [src]="message.chartUrl" alt="Chart generated from Green and Clean Nairobi data"> }
+            @if (message.chartConfig) { <div class="chart-canvas"><canvas #chartCanvas
+                aria-label="Chart generated from Green and Clean Nairobi data"></canvas></div> }
+          </div>
+        </article> }
+        } @if (error()) { <div class="error-note">{{ error() }} <button type="button" (click)="retry()">Retry</button>
+        </div> }</div>
       }
     </section>
-  } @else {
-    <section class="empty-state">
-      <div class="empty-icon">⌁</div>
-      <h3>Your answers will appear here</h3>
-      <p>Start with a question about Green &amp; Clean activity across Nairobi County.</p>
-    </section>
-  }
-
-  <!-- QUESTION SECTION -->
-  <section class="ask-card">
-    <div class="section-title">
-      <span class="spark">✦</span>
-      <div>
-        <h3>Ask the data assistant</h3>
-        <p>Query trees, staff, activities, locations, dates, and resource needs.</p>
-      </div>
-    </div>
-
-    <div class="input-wrap">
-      <textarea
-        [(ngModel)]="question"
-        (keydown.enter)="onEnter($event)"
-        [disabled]="loading()"
-        placeholder="e.g. How many trees have been planted in Westlands?"
-        rows="3"
-        aria-label="Question for Nairobi County data assistant">
-      </textarea>
-
-      <button
-        (click)="ask()"
-        [disabled]="loading() || !question.trim()">
-
-        @if (loading()) {
-          <span class="spinner"></span> Working
-        } @else {
-          Ask assistant <span>→</span>
-        }
-
-      </button>
-    </div>
-
-    <p class="hint">
-      Press Enter to send · Shift + Enter for a new line
-    </p>
-  </section>
-
-  <!-- ERROR MESSAGE -->
-  @if (error()) {
-    <div class="error" role="alert">
-      <span>!</span>{{ error() }}
-    </div>
-  }
-
+    <footer class="composer-wrap">
+      <div class="composer"><textarea #messageInput [(ngModel)]="question" (input)="resizeInput(messageInput)" (keydown)="onKeydown($event)"
+          [disabled]="loading()" rows="1" placeholder="Ask NaiSafi anything about Green &amp; Clean Nairobi..."
+          aria-label="Ask NaiSafi a question"></textarea><button type="button" class="send" (click)="send()"
+          [disabled]="!question.trim() || loading()" aria-label="Send question">↑</button></div>
+    </footer>
+  </main>
 </div>
-    <aside class="side-column">
-      <section class="side-card">
-        <div class="side-heading">
-          <h3>Try asking</h3><span>↗</span>
-        </div><button class="suggestion" (click)="runRecent('How many trees have been planted?')">How many trees have
-          been planted?<b>→</b></button><button class="suggestion"
-          (click)="runRecent('How many staff have been deployed?')">How many staff have been
-          deployed?<b>→</b></button><button class="suggestion"
-          (click)="runRecent('Show tree planting by subcounty')">Show tree planting by subcounty<b>→</b></button>
-      </section>@if (recent().length) { <section class="side-card recent">
-        <div class="side-heading">
-          <h3>Recent questions</h3><span>{{ recent().length }}</span>
-        </div>@for (item of recent(); track item) { <button (click)="runRecent(item)">{{ item }}</button> }
-      </section> }<div class="data-note">
-        <span>✓</span>
-        <p>
-            <b>Available data</b>
-            Greening Initiative: tree planting, staff deployment, activity reports, locations, dates, tree types and resource gaps.<br>
-            Public Sensitization: activities, attendees, partners, key messages, outputs, outcomes, activity types and locations.
-        </p>
-    </div>
-    </aside>
-  </section>
-</main>
-<p class="share-status" aria-live="polite">{{ shareStatus() }}</p>
