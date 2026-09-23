@@ -1,6 +1,23 @@
 import { ChartConfiguration } from 'chart.js';
 
-export interface DashboardResponse { output?: string; answer?: string; chartUrl?: string; hasChart?: boolean; source_used?: string; verified_facts?: unknown; insights?: unknown[]; }
-export type ResponsePart = { type: 'text'; content: string } | { type: 'chart'; config: ChartConfiguration };
-export interface QueryResult { answer: string; parts: ResponsePart[]; chartVersion: number; chartUrl: string | null; source: string; verified_facts: unknown; insights: unknown[]; }
-export interface MetricCard { label: string; value: string; icon: string; }
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: number;
+  chartUrl?: string | null;
+  chartConfig?: ChartConfiguration | null;
+  pending?: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  userId: string;
+  sessionId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: ChatMessage[];
+}
+
+export interface N8nResponse { output?: string; answer?: string; message?: string; chartUrl?: string; hasChart?: boolean; }
